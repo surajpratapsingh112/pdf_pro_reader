@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -27,21 +27,129 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create local.properties
+      - name: Flutter version info
+        run: flutter --version
+
+      - name: Create assets folder (required by pubspec.yaml)
+        run: mkdir -p assets
+
+      - name: Generate fresh Android project (v2 embedding)
         run: |
-          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
-          cat android/local.properties
+          # Delete existing android dir — removes all v1 embedding conflicts
+          rm -rf android/
+
+          # Flutter generates a clean v2 Android project
+          flutter create \
+            --org com.pdfpro \
+            --project-name pdf_pro_reader \
+            --platforms android \
+            .
+
+      - name: Set minSdkVersion to 21 (required by pdfx)
+        run: |
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' \
+            android/app/build.gradle || \
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' \
+            android/app/build.gradle
+          echo "=== build.gradle minSdk check ==="
+          grep -n "minSdk" android/app/build.gradle
+
+      - name: Write complete AndroidManifest.xml
+        run: |
+          cat > android/app/src/main/AndroidManifest.xml << 'MANIFEST_EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <!-- Storage permissions for opening PDF files -->
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+                  android:maxSdkVersion="32"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+                  android:maxSdkVersion="29"/>
+              <!-- Android 13+ granular permissions -->
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+
+              <!-- Internet for AdMob -->
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+              <application
+                  android:label="PDF Pro Reader"
+                  android:name="${applicationName}"
+                  android:icon="@mipmap/ic_launcher"
+                  android:requestLegacyExternalStorage="true">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:taskAffinity=""
+                      android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+
+                      <!-- Flutter launcher -->
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                      <!-- Open PDF files from file manager -->
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW"/>
+                          <category android:name="android.intent.category.DEFAULT"/>
+                          <data android:mimeType="application/pdf"/>
+                      </intent-filter>
+
+                  </activity>
+
+                  <!-- AdMob Test App ID (replace with real ID before publishing) -->
+                  <meta-data
+                      android:name="com.google.android.gms.ads.APPLICATION_ID"
+                      android:value="ca-app-pub-3940256099942544~3347511713"/>
+
+                  <meta-data
+                      android:name="flutterEmbedding"
+                      android:value="2"/>
+
+              </application>
+
+              <queries>
+                  <intent>
+                      <action android:name="android.intent.action.VIEW"/>
+                      <data android:scheme="content"/>
+                  </intent>
+              </queries>
+
+          </manifest>
+          MANIFEST_EOF
+
+          echo "=== AndroidManifest.xml ==="
+          cat android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build APK
+      - name: Analyze code (warnings only)
+        run: flutter analyze --no-fatal-warnings || true
+
+      - name: Build APK (release)
         run: flutter build apk --release
+
+      - name: Rename and prepare APK
+        run: |
+          mkdir -p output
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             output/PDFProReader_v1.0.apk
+          echo "APK size:"
+          ls -lh output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PDFProReader_APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: output/PDFProReader_v1.0.apk
           retention-days: 30
+
+      - name: Done
+        run: echo "APK built successfully!"
