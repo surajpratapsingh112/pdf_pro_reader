@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:photo_view/photo_view.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -240,6 +242,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 child: CircularProgressIndicator(color: AppColors.accent)),
               pageLoaderBuilder: (_) => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent)),
+              pageBuilder: _buildPageWithVideos,
             ),
           ),
         ),
@@ -253,6 +256,100 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (page % 5 == 0) {
       PrefsService.updateReadingProgress(widget.pdfPath, page, _totalPages);
     }
+  }
+
+  // ── Page builder with video overlays ──────────────────────────────────────
+
+  PhotoViewGalleryPageOptions _buildPageWithVideos(
+    BuildContext context,
+    Future<PdfPageImage?> pageImage,
+    int pageIndex,
+    PdfDocument doc,
+  ) {
+    final screenSize = MediaQuery.of(context).size;
+
+    return PhotoViewGalleryPageOptions.customChild(
+      childSize: screenSize,
+      initialScale: PhotoViewComputedScale.contained,
+      minScale: PhotoViewComputedScale.contained * 0.8,
+      maxScale: PhotoViewComputedScale.covered * 4.0,
+      child: FutureBuilder<PdfPageImage?>(
+        future: pageImage,
+        builder: (ctx, snapshot) {
+          final img = snapshot.data;
+          if (img == null) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.accent));
+          }
+          final pageW     = (img.width  ?? 595).toDouble();
+          final pageH     = (img.height ?? 842).toDouble();
+          final pageVideos = _videoAreas
+              .where((v) => v.pageIndex == pageIndex)
+              .toList();
+
+          return LayoutBuilder(
+            builder: (ctx2, constraints) {
+              final sw = constraints.maxWidth;
+              final sh = constraints.maxHeight;
+              final sx = sw / pageW;
+              final sy = sh / pageH;
+              return Stack(
+                children: [
+                  // PDF page image fills the entire space
+                  Positioned.fill(
+                    child: Image.memory(
+                      img.bytes,
+                      fit: BoxFit.fill,
+                      width:  sw,
+                      height: sh,
+                    ),
+                  ),
+                  // Video overlay buttons on top
+                  for (final v in pageVideos)
+                    _buildVideoOverlay(v, sx, sy),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildVideoOverlay(VideoArea v, double sx, double sy) {
+    final path   = _videoPaths[v.name];
+    final left   = v.x0 * sx;
+    final top    = v.y0 * sy;
+    final width  = (v.x1 - v.x0) * sx;
+    final height = (v.y1 - v.y0) * sy;
+
+    return Positioned(
+      left:   left,
+      top:    top,
+      width:  width,
+      height: height,
+      child: GestureDetector(
+        onTap: path != null
+            ? () => _showVideoPlayer(v.name, path)
+            : null,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.cyan, width: 2.5),
+            color:  AppColors.cyan.withOpacity(.12),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Center(
+            child: path != null
+                ? const Icon(Icons.play_circle_fill,
+                    color: AppColors.cyan, size: 48)
+                : const SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppColors.cyan)),
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Navigation bar ─────────────────────────────────────────────────────────

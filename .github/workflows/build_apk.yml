@@ -67,7 +67,7 @@ jobs:
           sed -i 's/targetSdk flutter\.targetSdkVersion/targetSdk 35/' android/app/build.gradle
 
           # Add NDK version (required by plugins)
-          sed -i '/compileSdk/a\        ndkVersion = "25.1.8937393"' android/app/build.gradle
+          sed -i '/compileSdk/a\        ndkVersion = "27.0.12077973"' android/app/build.gradle
 
           echo "=== build.gradle ==="
           grep -n "minSdk\|compileSdk\|targetSdk\|ndkVersion\|kotlin\|agp" android/app/build.gradle || true
