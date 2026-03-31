@@ -42,37 +42,38 @@ jobs:
             --platforms android \
             .
 
-      - name: Fix Gradle wrapper version (AGP 8.3 needs Gradle 8.4+)
+      - name: Fix Gradle wrapper version
         run: |
-          sed -i 's/gradle-.*-all.zip/gradle-8.7-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
+          sed -i 's/gradle-.*-all.zip/gradle-8.9-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
           echo "=== gradle-wrapper.properties ==="
           cat android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Fix Android build versions
         run: |
-          # Pin Kotlin + AGP versions (avoids version conflicts)
+          # AGP 8.7.0 bundles R8 that supports Kotlin 2.1.0 metadata
           sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "2.1.0"/' android/settings.gradle
-          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.3.0"/' android/settings.gradle
+          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.7.0"/' android/settings.gradle
+          sed -i 's/id "com.android.library" version "[^"]*"/id "com.android.library" version "8.7.0"/' android/settings.gradle || true
 
-          # Hardcode SDK versions (pdfx requires minSdk 21)
+          echo "=== settings.gradle ==="
+          cat android/settings.gradle
+
+          # Hardcode SDK versions
+          sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
+          sed -i 's/minSdk = flutter\.minSdkVersion/minSdk = 21/' android/app/build.gradle
+          sed -i 's/targetSdk = flutter\.targetSdkVersion/targetSdk = 35/' android/app/build.gradle
           sed -i 's/compileSdk flutter\.compileSdkVersion/compileSdk 35/' android/app/build.gradle
           sed -i 's/minSdk flutter\.minSdkVersion/minSdk 21/' android/app/build.gradle
-          sed -i 's/targetSdk flutter\.targetSdkVersion/targetSdk 34/' android/app/build.gradle
+          sed -i 's/targetSdk flutter\.targetSdkVersion/targetSdk 35/' android/app/build.gradle
 
-          # Also try alternate format
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' android/app/build.gradle
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/' android/app/build.gradle
+          # Add NDK version (required by plugins)
+          sed -i '/compileSdk/a\        ndkVersion = "25.1.8937393"' android/app/build.gradle
 
-          echo "=== build.gradle SDK check ==="
-          grep -n "minSdk\|compileSdk\|targetSdk" android/app/build.gradle
+          echo "=== build.gradle ==="
+          grep -n "minSdk\|compileSdk\|targetSdk\|ndkVersion\|kotlin\|agp" android/app/build.gradle || true
 
-          # Optimize gradle memory
-          cat > android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4G
-          android.useAndroidX=true
-          android.enableJetifier=true
-          EOF
+          # Gradle properties
+          printf 'org.gradle.jvmargs=-Xmx4G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n' > android/gradle.properties
 
       - name: Write complete AndroidManifest.xml
         run: |
@@ -120,28 +121,22 @@ jobs:
           </manifest>
           MANIFEST_EOF
 
-          echo "=== AndroidManifest.xml ==="
-          cat android/app/src/main/AndroidManifest.xml
-
-      - name: Fix test file (flutter create overwrites it with wrong MyApp reference)
+      - name: Fix test file
         run: |
-          cat > test/widget_test.dart << 'TEST_EOF'
-          import 'package:flutter_test/flutter_test.dart';
-          void main() {
-            testWidgets('placeholder test', (WidgetTester tester) async {
-              expect(true, isTrue);
-            });
-          }
-          TEST_EOF
+          printf 'import "package:flutter_test/flutter_test.dart";\nvoid main() {\n  testWidgets("placeholder", (WidgetTester t) async {\n    expect(true, isTrue);\n  });\n}\n' > test/widget_test.dart
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Fix plugin build.gradle SDK references
         run: |
-          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.compileSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.compileSdkVersion/35/g' 2>/dev/null || true
-          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.minSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.minSdkVersion/21/g' 2>/dev/null || true
-          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.targetSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.targetSdkVersion/34/g' 2>/dev/null || true
+          find $HOME/.pub-cache -name "build.gradle" \
+            | xargs grep -l "flutter\.compileSdkVersion\|flutter\.minSdkVersion\|flutter\.targetSdkVersion" 2>/dev/null \
+            | xargs sed -i \
+                -e 's/flutter\.compileSdkVersion/35/g' \
+                -e 's/flutter\.minSdkVersion/21/g' \
+                -e 's/flutter\.targetSdkVersion/35/g' \
+              2>/dev/null || true
 
       - name: Analyze code (warnings only)
         run: flutter analyze --no-fatal-warnings || true
