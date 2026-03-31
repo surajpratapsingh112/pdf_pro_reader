@@ -94,7 +94,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _scanningVideos = false;
         });
         if (result.videoPaths.isNotEmpty) {
-          _showSnack('${result.videoPaths.length} video(s) found — tap cyan button to play 🎬');
+          _showSnack('${result.videoPaths.length} video(s) found — tap cyan box to play 🎬');
         }
       }
     } catch (_) {

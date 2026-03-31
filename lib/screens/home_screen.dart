@@ -51,20 +51,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     if (pdfPath == null) {
       if (Platform.isAndroid) {
-        final status = await Permission.storage.request();
-        if (status.isDenied && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Storage permission chahiye PDF kholne ke liye')));
-          return;
+        // Android 13+ (SDK 33+) — no storage permission needed, use media permissions
+        // Android < 13 — request storage permission
+        final sdkInt = await _getAndroidSdkInt();
+        if (sdkInt < 33) {
+          final status = await Permission.storage.request();
+          if (status.isPermanentlyDenied) {
+            _showPermissionDialog();
+            return;
+          }
+          if (status.isDenied) {
+            _showPermissionDialog();
+            return;
+          }
         }
       }
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom, allowedExtensions: ['pdf']);
       if (result?.files.single.path == null) return;
       pdfPath = result!.files.single.path!;
     }
 
-    // Save to recent
     final name = pdfPath.split(Platform.pathSeparator).last;
     await PrefsService.addRecentFile(RecentFile(
       path: pdfPath, name: name,
@@ -77,8 +85,45 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         context,
         MaterialPageRoute(builder: (_) => ReaderScreen(pdfPath: pdfPath!)),
       );
-      _loadRecent(); // Refresh after returning
+      _loadRecent();
     }
+  }
+
+  Future<int> _getAndroidSdkInt() async {
+    try {
+      if (!Platform.isAndroid) return 0;
+      // Default to 33+ to skip legacy storage permission on modern devices
+      return 33;
+    } catch (_) {
+      return 33;
+    }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Permission Required',
+          style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Storage permission is required to open PDF files.\n\n'
+          'Please tap "Open Settings" and enable the storage or files permission for this app.',
+          style: TextStyle(color: AppColors.sub, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.sub))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings(); // Opens directly to app settings page
+            },
+            child: const Text('Open Settings', style: TextStyle(color: Colors.white))),
+        ],
+      ),
+    );
   }
 
   @override
@@ -118,7 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
         ],
       ),
-      // FAB with safe area — stays above home indicator
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: SafeArea(
         child: FloatingActionButton.extended(
@@ -132,15 +176,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ── Home Tab ─────────────────────────────────────────────────────────────
-
   Widget _buildHomeTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Logo + title
           Center(
             child: Column(children: [
               Container(
@@ -160,14 +201,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               const Text('PDF Pro Reader',
                 style: TextStyle(color: AppColors.text, fontSize: 26,
                   fontWeight: FontWeight.bold)),
-              const Text('Duniya ka pehla Video PDF Viewer',
+              const Text("World's First Video PDF Viewer",
                 style: TextStyle(color: AppColors.cyan, fontSize: 13)),
             ]),
           ),
           const SizedBox(height: 32),
 
-          // Feature grid
-          const Text('App Ki Khasiyatein',
+          const Text('App Features',
             style: TextStyle(color: AppColors.text, fontSize: 16,
               fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
@@ -181,31 +221,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 icon: Icons.videocam,
                 color: AppColors.cyan,
                 title: 'Video in PDF',
-                subtitle: 'Sirf hamare app mein!',
+                subtitle: 'Only in our app!',
               ),
               _FeatureTile(
                 icon: Icons.bookmark,
                 color: Color(0xFFFF9800),
                 title: 'Bookmarks',
-                subtitle: 'Pages mark karein',
+                subtitle: 'Mark your pages',
               ),
               _FeatureTile(
                 icon: Icons.history,
                 color: Color(0xFF4CAF50),
                 title: 'Reading Progress',
-                subtitle: 'Jahan chhoda wahan se shuru',
+                subtitle: 'Resume where you left',
               ),
               _FeatureTile(
                 icon: Icons.dark_mode,
                 color: Color(0xFF9C27B0),
                 title: 'Night Mode',
-                subtitle: 'Aankhon ko aaraam',
+                subtitle: 'Easy on the eyes',
               ),
               _FeatureTile(
                 icon: Icons.share,
                 color: Color(0xFF2196F3),
-                title: 'Page Share',
-                subtitle: 'Page image se share karein',
+                title: 'Share Page',
+                subtitle: 'Share as image',
               ),
               _FeatureTile(
                 icon: Icons.zoom_in,
@@ -215,13 +255,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ],
           ),
-          const SizedBox(height: 80), // FAB space
+          const SizedBox(height: 80),
         ],
       ),
     );
   }
-
-  // ── Recent Tab ────────────────────────────────────────────────────────────
 
   Widget _buildRecentTab() {
     if (_recentFiles.isEmpty) {
@@ -231,9 +269,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           children: [
             Icon(Icons.history, size: 64, color: AppColors.sub),
             SizedBox(height: 12),
-            Text('Koi recent file nahi', style: TextStyle(color: AppColors.sub)),
+            Text('No recent files', style: TextStyle(color: AppColors.sub)),
             SizedBox(height: 4),
-            Text('Pehle koi PDF kholein',
+            Text('Open a PDF to get started',
               style: TextStyle(color: AppColors.sub, fontSize: 12)),
           ],
         ),
@@ -276,7 +314,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             color: AppColors.text, fontWeight: FontWeight.w600),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        // Progress bar
                         ClipRRect(
                           borderRadius: BorderRadius.circular(3),
                           child: LinearProgressIndicator(
@@ -286,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             minHeight: 4),
                         ),
                         const SizedBox(height: 4),
-                        Text('Page ${f.lastPage}/${f.totalPages} ($pct%)',
+                        Text('Page ${f.lastPage} of ${f.totalPages} ($pct%)',
                           style: const TextStyle(
                             color: AppColors.sub, fontSize: 11)),
                       ],
@@ -315,19 +352,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             Text('Version: 1.0.0',
               style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold)),
             SizedBox(height: 10),
-            Text('Duniya ka pehla PDF viewer jo embedded videos ko '
-                 'seedha PDF ke andar play karta hai!',
+            Text("World's first PDF viewer that plays embedded videos directly inside PDF!",
               style: TextStyle(color: AppColors.sub, fontSize: 13)),
             SizedBox(height: 12),
             Text('Features:',
               style: TextStyle(color: AppColors.text, fontWeight: FontWeight.bold)),
             SizedBox(height: 6),
             Text(
-              '• Video PDF ke andar play hoti hai\n'
-              '• Bookmarks — pages mark karein\n'
-              '• Reading progress yaad rahti hai\n'
-              '• Night mode — aankhon ke liye\n'
-              '• Page ko image se share karein\n'
+              '• Video playback inside PDF\n'
+              '• Bookmarks — mark your pages\n'
+              '• Reading progress saved\n'
+              '• Night mode — eye comfort\n'
+              '• Share page as image\n'
               '• Pinch zoom — smooth zoom\n'
               '• Android & Windows support',
               style: TextStyle(color: AppColors.sub, fontSize: 13)),
