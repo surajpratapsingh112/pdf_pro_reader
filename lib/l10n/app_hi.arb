@@ -1,0 +1,65 @@
+{
+  "@@locale": "hi",
+
+  "appTitle": "PDF Pro Reader",
+  "appSubtitle": "दुनिया का पहला Video PDF Viewer",
+
+  "openPdf": "PDF खोलें",
+  "recentFiles": "हाल की फ़ाइलें",
+  "home": "होम",
+  "noRecentFiles": "कोई हाल की फ़ाइल नहीं",
+  "openFirstPdf": "शुरू करने के लिए PDF खोलें",
+
+  "features": "विशेषताएं",
+  "videoInPdf": "PDF में Video",
+  "videoInPdfSub": "सिर्फ हमारे App में!",
+  "bookmarks": "बुकमार्क",
+  "bookmarksSub": "पेज मार्क करें",
+  "readingProgress": "पढ़ने की प्रगति",
+  "readingProgressSub": "जहाँ छोड़ा वहाँ से शुरू",
+  "nightMode": "नाइट मोड",
+  "nightModeSub": "आँखों के लिए आरामदायक",
+  "sharePages": "पेज शेयर करें",
+  "sharePagesSub": "इमेज के रूप में शेयर",
+  "pinchZoom": "पिंच ज़ूम",
+  "pinchZoomSub": "आसान ज़ूम",
+
+  "tapToPlay": "चलाने के लिए टैप करें",
+  "videoPlaying": "Video चल रही है",
+
+  "page": "पेज",
+  "of": "/",
+  "goToPage": "पेज पर जाएं",
+  "goToPageHint": "पेज नंबर डालें",
+  "go": "जाएं",
+  "cancel": "रद्द करें",
+  "ok": "ठीक है",
+
+  "bookmarkAdded": "बुकमार्क जोड़ा ✅ — पेज {page}",
+  "@bookmarkAdded": { "placeholders": { "page": { "type": "int" } } },
+  "bookmarkRemoved": "बुकमार्क हटाया — पेज {page}",
+  "@bookmarkRemoved": { "placeholders": { "page": { "type": "int" } } },
+  "noBookmarks": "अभी कोई बुकमार्क नहीं",
+  "addBookmarkHint": "पेज मार्क करने के लिए बुकमार्क आइकन टैप करें",
+
+  "nightModeOn": "🌙 नाइट मोड चालू",
+  "dayModeOn": "☀ डे मोड चालू",
+  "sharePageLabel": "वर्तमान पेज को इमेज के रूप में शेयर करें",
+  "sharingPage": "पेज शेयर के लिए तैयार हो रहा है...",
+  "shareError": "शेयर नहीं हो सका: {error}",
+  "@shareError": { "placeholders": { "error": { "type": "String" } } },
+
+  "videosFound": "{count} video मिली — cyan box टैप करके चलाएं 🎬",
+  "@videosFound": { "placeholders": { "count": { "type": "int" } } },
+  "videoNotFound": "Video फ़ाइल नहीं मिली: {name}",
+  "@videoNotFound": { "placeholders": { "name": { "type": "String" } } },
+
+  "aboutTitle": "PDF Pro Reader",
+  "aboutVersion": "संस्करण: 1.0.0",
+  "aboutDesc": "दुनिया का पहला PDF viewer जो embedded videos को सीधे PDF के अंदर play करता है!",
+  "aboutFeatures": "विशेषताएं:\n• PDF के अंदर Video\n• बुकमार्क\n• पढ़ने की प्रगति सेव\n• नाइट मोड\n• पेज इमेज शेयर\n• पिंच ज़ूम\n• Android और Windows",
+
+  "storagePermissionRequired": "PDF खोलने के लिए storage permission आवश्यक है",
+  "back": "वापस जाएं",
+  "pdfLoadError": "PDF लोड नहीं हो सकी"
+}

@@ -1,0 +1,65 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "PDF Pro Reader",
+  "appSubtitle": "World's First Video PDF Viewer",
+
+  "openPdf": "Open PDF",
+  "recentFiles": "Recent Files",
+  "home": "Home",
+  "noRecentFiles": "No recent files",
+  "openFirstPdf": "Open a PDF to get started",
+
+  "features": "Features",
+  "videoInPdf": "Video in PDF",
+  "videoInPdfSub": "Only in our app!",
+  "bookmarks": "Bookmarks",
+  "bookmarksSub": "Mark your pages",
+  "readingProgress": "Reading Progress",
+  "readingProgressSub": "Resume where you left off",
+  "nightMode": "Night Mode",
+  "nightModeSub": "Easy on the eyes",
+  "sharePages": "Share Pages",
+  "sharePagesSub": "Share as image",
+  "pinchZoom": "Pinch Zoom",
+  "pinchZoomSub": "Smooth zoom in/out",
+
+  "tapToPlay": "Tap to Play",
+  "videoPlaying": "Video Playing",
+
+  "page": "Page",
+  "of": "of",
+  "goToPage": "Go To Page",
+  "goToPageHint": "Enter page number",
+  "go": "Go",
+  "cancel": "Cancel",
+  "ok": "OK",
+
+  "bookmarkAdded": "Bookmark added ✅ — Page {page}",
+  "@bookmarkAdded": { "placeholders": { "page": { "type": "int" } } },
+  "bookmarkRemoved": "Bookmark removed — Page {page}",
+  "@bookmarkRemoved": { "placeholders": { "page": { "type": "int" } } },
+  "noBookmarks": "No bookmarks yet",
+  "addBookmarkHint": "Tap the bookmark icon to mark a page",
+
+  "nightModeOn": "🌙 Night Mode ON",
+  "dayModeOn": "☀ Day Mode ON",
+  "sharePageLabel": "Share current page as image",
+  "sharingPage": "Preparing page for sharing...",
+  "shareError": "Could not share: {error}",
+  "@shareError": { "placeholders": { "error": { "type": "String" } } },
+
+  "videosFound": "{count} video(s) found — tap the cyan box to play 🎬",
+  "@videosFound": { "placeholders": { "count": { "type": "int" } } },
+  "videoNotFound": "Video file not found: {name}",
+  "@videoNotFound": { "placeholders": { "name": { "type": "String" } } },
+
+  "aboutTitle": "PDF Pro Reader",
+  "aboutVersion": "Version: 1.0.0",
+  "aboutDesc": "World's first PDF viewer that plays embedded videos directly inside the PDF!",
+  "aboutFeatures": "Features:\n• Video playback inside PDF\n• Bookmarks\n• Reading progress saved\n• Night mode\n• Share page as image\n• Pinch zoom\n• Android & Windows",
+
+  "storagePermissionRequired": "Storage permission required to open PDFs",
+  "back": "Go Back",
+  "pdfLoadError": "PDF could not be loaded"
+}

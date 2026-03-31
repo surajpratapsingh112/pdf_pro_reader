@@ -1,0 +1,59 @@
+name: pdf_pro_reader
+description: PDF Pro Reader - Duniya ka pehla Video PDF Viewer. PDF ke andar videos play karo.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # PDF rendering (cross-platform)
+  pdfx: ^2.6.0
+
+  # Video playback (Android + iOS)
+  video_player: ^2.8.3
+
+  # Video playback Windows
+  video_player_win: ^2.3.0
+
+  # Better video player UI (play/pause/seek controls)
+  chewie: ^1.8.1
+
+  # File picker
+  file_picker: ^8.0.0+1
+
+  # Local storage (bookmarks, recent files, settings)
+  shared_preferences: ^2.2.3
+
+  # Path utilities
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Google AdMob ads
+  google_mobile_ads: ^5.1.0
+
+  # Share pages as images
+  share_plus: ^9.0.0
+
+  # Permissions
+  permission_handler: ^11.3.0
+
+  # Loading indicators
+  flutter_spinkit: ^5.2.1
+
+  # Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

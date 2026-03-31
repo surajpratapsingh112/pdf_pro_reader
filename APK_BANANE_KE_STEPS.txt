@@ -1,0 +1,188 @@
+=====================================================
+  APK BANANE KE STEPS - GitHub Actions se FREE mein
+  Flutter install karne ki ZAROORAT NAHI!
+=====================================================
+
+TOTAL TIME: ~20 minute (pehli baar)
+COST: ZERO (bilkul free)
+
+=====================================================
+STEP 1: GitHub Account Banao (5 minute)
+=====================================================
+
+1. Browser mein kholein: https://github.com
+2. "Sign up" button click karein (top right)
+3. Email + password set karein
+4. Email verify karein
+5. Free plan choose karein
+   DONE ✅
+
+=====================================================
+STEP 2: GitHub Desktop Install Karo (5 minute)
+  (Command line nahi - simple GUI)
+=====================================================
+
+1. Kholein: https://desktop.github.com
+2. "Download for Windows" click karein
+3. Install karein
+4. Open karein
+5. "Sign in to GitHub.com" click karein
+6. Apna GitHub account se login karein
+   DONE ✅
+
+=====================================================
+STEP 3: New Repository Banao (2 minute)
+=====================================================
+
+1. GitHub Desktop mein:
+   File > New Repository
+
+2. Name:         pdf_pro_reader
+   Local Path:   E:\Projects\PDF_Spliter_And_Merger
+                 (ya koi bhi folder)
+   Description:  PDF Pro Reader App
+
+   [x] Initialize this repository with a README
+
+3. "Create Repository" click karein
+
+4. Abhi apne project ke saare files is folder mein
+   copy kar lo:
+
+   COPY karo yeh folder:
+   E:\Projects\PDF_Spliter_And_Merger\pdf_pro_reader_flutter\
+
+   INTO: jo folder aapne upar choose kiya
+
+5. GitHub Desktop mein left side mein
+   saari files dikhenge "Changes" tab mein
+
+6. Neeche likho: "Initial commit - PDF Pro Reader"
+
+7. "Commit to main" button click karein
+
+8. Top mein "Publish repository" click karein
+
+   [  ] Keep this code private  <- UNCHECKED rakhein
+   (Private repo mein GitHub Actions free mein
+   sirf 2000 min/month hote hain - public mein unlimited)
+
+9. "Publish Repository" click karein
+   DONE ✅
+
+=====================================================
+STEP 4: GitHub par jaao aur APK build dekho (10 min)
+=====================================================
+
+1. Browser mein kholein:
+   https://github.com/AAPKA_USERNAME/pdf_pro_reader
+
+   (username woh hai jo aapne signup mein choose kiya)
+
+2. "Actions" tab click karein
+   (Top mein: Code | Issues | Pull requests | Actions)
+
+3. Left side mein dikhega:
+   "Build APK"
+
+4. "Run workflow" button click karein
+   > "Run workflow" confirm karein
+
+5. Ek naya row dikhega - yellow circle = running
+
+6. Click karein us row par - progress dekhein:
+
+   ✅ Checkout repository
+   ✅ Setup Java 17
+   ✅ Setup Flutter 3.22
+   ✅ Install dependencies
+   ⏳ Build APK (release)  <- ~8 minute lagenge
+   ✅ Upload APK Artifact
+   ✅ Build complete
+
+7. Jab sab green ho jaye:
+   Neeche "Artifacts" section mein dikhega:
+
+   📦 PDFProReader_APK
+
+8. Click karein "PDFProReader_APK"
+
+9. ZIP file download hogi
+
+10. ZIP extract karein
+    "PDFProReader_v1.0.apk" milegi
+    DONE ✅ APK BAN GAYI!
+
+=====================================================
+STEP 5: Mobile par Install karo (2 minute)
+=====================================================
+
+METHOD A: USB Cable se
+1. APK file apne computer par hai
+2. USB cable se mobile connect karein
+3. APK file copy karo mobile ke Downloads folder mein
+4. Mobile par file manager kholein
+5. Downloads > PDFProReader_v1.0.apk
+6. Tap karein
+
+METHOD B: WhatsApp se (easiest!)
+1. APK file apne WhatsApp par khud ko bhejein
+2. Mobile par WhatsApp kholein
+3. APK download karein
+4. "Open" tap karein
+
+METHOD C: Google Drive se
+1. Drive par upload karein
+2. Mobile par open karein
+3. Download karein
+
+-----------------------------------------------------
+PEHLI BAAR INSTALL KARTE WAQT:
+-----------------------------------------------------
+
+Ek warning aayegi:
+"Install from unknown sources not allowed"
+
+Kya karein:
+1. "Settings" button tap karein
+2. "Allow from this source" ON karein
+3. Wapas jaayein
+4. Install tap karein
+
+YA: Settings > Security > Unknown Sources > ON
+
+(Yeh sirf testing ke liye hai. Play Store par publish
+hone ke baad users ko yeh step nahi karna hoga)
+
+=====================================================
+STEP 6: Test Karein!
+=====================================================
+
+1. App open karein
+2. "Open PDF" tap karein
+3. Koi bhi PDF choose karein
+4. Agar video-embedded PDF hai:
+   Cyan box dikhega - tap karein - video chalegi!
+5. Features test karein:
+   - Pinch zoom
+   - Bookmarks
+   - Night mode (3 dots menu)
+   - Page progress bar
+   - Recent files
+
+=====================================================
+PROBLEMS? YEH TRY KAREIN:
+=====================================================
+
+Problem: "App not installed" error
+Fix: Settings > Apps > Uninstall old version > Reinstall
+
+Problem: APK build fail ho gayi (red X)
+Fix: Actions > Failed job > Click > Error dekhein
+     Hume screenshot bhejein - fix kar denge
+
+Problem: Video nahi chal rahi
+Fix: Yahi expected hai abhi - video-embedded PDF
+     hamare Python app se banaya hua hona chahiye
+
+=====================================================
