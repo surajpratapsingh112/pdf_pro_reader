@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
@@ -45,7 +44,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void initState() {
     super.initState();
-    // Make status bar transparent so PDF uses full screen
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
@@ -58,9 +56,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
-    // Save reading progress
     PrefsService.updateReadingProgress(widget.pdfPath, _curPage, _totalPages);
-    // Restore default system UI
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
     ));
@@ -70,17 +66,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Future<void> _openPdf() async {
     try {
-      final doc        = await PdfDocument.openFile(widget.pdfPath);
-      final savedPage  = await PrefsService.getSavedPage(widget.pdfPath);
+      final doc       = await PdfDocument.openFile(widget.pdfPath);
+      final savedPage = await PrefsService.getSavedPage(widget.pdfPath);
       _pdfCtrl = PdfController(
         document:    Future.value(doc),
         initialPage: savedPage ?? 1,
       );
-      if (mounted) setState(() {
-        _loading    = false;
-        _totalPages = doc.pagesCount;
-        _curPage    = savedPage ?? 1;
-      });
+      if (mounted) {
+        setState(() {
+          _loading    = false;
+          _totalPages = doc.pagesCount;
+          _curPage    = savedPage ?? 1;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _loading = false; _error = e.toString(); });
     }
@@ -96,8 +94,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _scanningVideos = false;
         });
         if (result.videoPaths.isNotEmpty) {
-          _showSnack('${result.videoPaths.length} video(s) found '
-              '— tap the cyan box to play 🎬');
+          _showSnack('${result.videoPaths.length} video(s) found — tap cyan button to play 🎬');
         }
       }
     } catch (_) {
@@ -120,16 +117,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // MediaQuery for safe area info
-    final mq         = MediaQuery.of(context);
-    final topPad     = mq.padding.top;      // status bar + notch height
-    final bottomPad  = mq.padding.bottom;   // home indicator / gesture bar
+    final mq        = MediaQuery.of(context);
+    final topPad    = mq.padding.top;
+    final bottomPad = mq.padding.bottom;
 
     return KeyboardListener(
       focusNode: FocusNode()..requestFocus(),
       onKeyEvent: _onKey,
       child: Scaffold(
-        // extendBodyBehindAppBar lets PDF go under status bar when controls hidden
         extendBodyBehindAppBar: true,
         extendBody: true,
         backgroundColor: _nightMode ? Colors.black : AppColors.bg,
@@ -139,24 +134,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
             : _error != null
                 ? _buildError()
                 : _buildViewer(topPad, bottomPad),
-        bottomNavigationBar: _showControls
-            ? _buildNavBar(bottomPad)
-            : null,
+        bottomNavigationBar: _showControls ? _buildNavBar(bottomPad) : null,
       ),
     );
   }
 
-  // ── AppBar with safe area padding ─────────────────────────────────────────
+  // ── AppBar ─────────────────────────────────────────────────────────────────
 
   AppBar _buildAppBar(double topPad) {
     final fname = widget.pdfPath.split(Platform.pathSeparator).last;
     return AppBar(
-      // toolbarHeight includes top safe area automatically via AppBar
       backgroundColor: AppColors.bar.withOpacity(0.96),
       elevation: 0,
       title: Text(
-        fname.length > 22
-            ? '...${fname.substring(fname.length - 22)}' : fname,
+        fname.length > 22 ? '...${fname.substring(fname.length - 22)}' : fname,
         style: const TextStyle(fontSize: 13)),
       actions: [
         if (_videoPaths.isNotEmpty)
@@ -181,10 +172,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ),
           ),
         if (_scanningVideos)
-          const Padding(padding: EdgeInsets.only(right: 8),
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
             child: Center(child: SizedBox(width: 14, height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2, color: AppColors.cyan)))),
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyan)))),
         IconButton(
           icon: Icon(_isBookmarked ? Icons.bookmark : Icons.bookmark_border),
           color: _isBookmarked ? const Color(0xFFFF9800) : AppColors.sub,
@@ -195,11 +186,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
           color: AppColors.card,
           onSelected: _onMenuAction,
           itemBuilder: (_) => [
-            _menuItem('nightmode',
-              _nightMode ? '☀  Day Mode' : '🌙  Night Mode', Icons.dark_mode),
+            _menuItem('nightmode', _nightMode ? '☀  Day Mode' : '🌙  Night Mode', Icons.dark_mode),
             _menuItem('bookmarks', '🔖  Bookmarks', Icons.bookmarks),
             _menuItem('share',     '📤  Share Page', Icons.share),
             _menuItem('goto',      '📄  Go to Page', Icons.input),
+            if (_videoPaths.isNotEmpty)
+              _menuItem('videos', '🎬  Play Video', Icons.videocam),
           ],
         ),
       ],
@@ -211,25 +203,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
       child: Row(children: [
         Icon(icon, color: AppColors.accent, size: 18),
         const SizedBox(width: 8),
-        Text(text, style: const TextStyle(
-          color: AppColors.text, fontSize: 13)),
+        Text(text, style: const TextStyle(color: AppColors.text, fontSize: 13)),
       ]));
 
-  // ── Viewer with explicit safe-area padding ─────────────────────────────────
+  // ── Viewer ─────────────────────────────────────────────────────────────────
 
   Widget _buildViewer(double topPad, double bottomPad) {
-    // When controls are hidden (fullscreen), add padding manually
-    // so PDF doesn't go behind notch/status bar
     final topSafe    = _showControls ? 0.0 : topPad;
     final bottomSafe = _showControls ? 0.0 : bottomPad;
 
     return ColorFiltered(
       colorFilter: _nightMode
         ? const ColorFilter.matrix([
-            -1,  0,  0, 0, 255,
-             0, -1,  0, 0, 255,
-             0,  0, -1, 0, 255,
-             0,  0,  0, 1,   0,
+            -1, 0, 0, 0, 255,
+             0,-1, 0, 0, 255,
+             0, 0,-1, 0, 255,
+             0, 0, 0, 1,   0,
           ])
         : const ColorFilter.matrix([
             1, 0, 0, 0, 0,
@@ -242,17 +231,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
         child: GestureDetector(
           onTap: () => setState(() => _showControls = !_showControls),
           child: PdfView(
-            controller:      _pdfCtrl!,
+            controller:    _pdfCtrl!,
             scrollDirection: Axis.vertical,
-            padding:         8,
-            onPageChanged:   _onPageChanged,
+            onPageChanged: _onPageChanged,
             builders: PdfViewBuilders<DefaultBuilderOptions>(
               options: const DefaultBuilderOptions(),
               documentLoaderBuilder: (_) => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent)),
               pageLoaderBuilder: (_) => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent)),
-              pageBuilder: _buildPageWithVideos,
             ),
           ),
         ),
@@ -268,118 +255,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  // ── Page with video overlays ──────────────────────────────────────────────
-
-  Widget _buildPageWithVideos(
-    BuildContext context,
-    AsyncSnapshot<PdfPageImage?> snapshot,
-    int pageNumber,
-    PdfDocument doc,
-  ) {
-    final img = snapshot.data;
-    if (img == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.accent));
-    }
-    final pageVideos =
-        _videoAreas.where((v) => v.pageIndex == pageNumber - 1).toList();
-
-    return LayoutBuilder(builder: (ctx, constraints) {
-      final sx = constraints.maxWidth  / img.width.toDouble();
-      final sy = constraints.maxHeight / img.height.toDouble();
-
-      return Stack(children: [
-        // PDF page image — full size
-        SizedBox(
-          width:  constraints.maxWidth,
-          height: constraints.maxHeight,
-          child:  Image.memory(img.bytes,
-            width:  constraints.maxWidth,
-            height: constraints.maxHeight,
-            fit:    BoxFit.fill),
-        ),
-        // Video overlays
-        for (final v in pageVideos) _buildVideoOverlay(v, sx, sy),
-      ]);
-    });
-  }
-
-  Widget _buildVideoOverlay(VideoArea v, double sx, double sy) {
-    final left   = v.x0 * sx;
-    final top    = v.y0 * sy;
-    final width  = v.width  * sx;
-    final height = v.height * sy;
-    final playing = _activePlayers[v.name] == true;
-
-    return Positioned(
-      left: left, top: top, width: width, height: height,
-      child: playing
-        ? InlineVideoPlayer(
-            videoPath: _videoPaths[v.name]!,
-            onClose: () => setState(() => _activePlayers.remove(v.name)),
-          )
-        : GestureDetector(
-            onTap: () => _playVideo(v),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.cyan, width: 2),
-                color: AppColors.cyan.withOpacity(.07),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.play_circle_fill,
-                    color: AppColors.cyan,
-                    size: (width * 0.28).clamp(20.0, 58.0)),
-                  if (height > 48) ...[
-                    const SizedBox(height: 4),
-                    Text('Tap to Play',
-                      style: TextStyle(
-                        color: AppColors.cyan,
-                        fontSize: (width * 0.08).clamp(9.0, 13.0),
-                        fontWeight: FontWeight.bold)),
-                    Text(v.name, overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.cyan.withOpacity(.6),
-                        fontSize: (width * 0.06).clamp(7.0, 10.0))),
-                  ],
-                ],
-              ),
-            ),
-          ),
-    );
-  }
-
-  void _playVideo(VideoArea v) {
-    if (!_videoPaths.containsKey(v.name)) {
-      _showSnack('Video extract failed: ${v.name}');
-      return;
-    }
-    setState(() => _activePlayers[v.name] = true);
-  }
-
-  // ── Navigation bar with safe-area bottom padding ──────────────────────────
+  // ── Navigation bar ─────────────────────────────────────────────────────────
 
   Widget _buildNavBar(double bottomPad) {
     final pct = _totalPages > 0 ? _curPage / _totalPages : 0.0;
     return SafeArea(
-      // SafeArea handles bottom padding for home indicator / gesture bar
       top: false,
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.bar,
-          border: Border(
-            top: BorderSide(color: Colors.white.withOpacity(.07))),
+          border: Border(top: BorderSide(color: Colors.white.withOpacity(.07))),
         ),
-        // Extra bottom padding if gesture navigation bar is present
         padding: EdgeInsets.only(
-          left: 12, right: 12,
-          top: 6,
+          left: 12, right: 12, top: 6,
           bottom: bottomPad > 0 ? 4 : 8,
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
@@ -392,7 +283,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Prev
               IconButton(
                 onPressed: _curPage > 1 ? _prevPage : null,
                 icon: const Icon(Icons.chevron_left, size: 28),
@@ -401,7 +291,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
-              // Page info — tap to jump
               GestureDetector(
                 onTap: _goToPage,
                 child: Container(
@@ -412,12 +301,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                   child: Text('$_curPage / $_totalPages',
                     style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold)),
+                      color: AppColors.text, fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
-              // Next
               IconButton(
                 onPressed: _curPage < _totalPages ? _nextPage : null,
                 icon: const Icon(Icons.chevron_right, size: 28),
@@ -481,14 +367,96 @@ class _ReaderScreenState extends State<ReaderScreen> {
       case 'goto':
         _goToPage();
         break;
+      case 'videos':
+        _showVideosSheet();
+        break;
     }
+  }
+
+  void _showVideosSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.sub.withOpacity(.4),
+              borderRadius: BorderRadius.circular(2)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Text('Videos (${_videoPaths.length})',
+              style: const TextStyle(color: AppColors.text,
+                fontWeight: FontWeight.bold, fontSize: 16))),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: _videoPaths.entries.map((e) {
+                final isPlaying = _activePlayers[e.key] == true;
+                return ListTile(
+                  leading: const Icon(Icons.videocam, color: AppColors.cyan),
+                  title: Text(e.key,
+                    style: const TextStyle(color: AppColors.text)),
+                  subtitle: Text(
+                    _videoAreas.where((v) => v.name == e.key).isNotEmpty
+                      ? 'Page ${_videoAreas.firstWhere((v) => v.name == e.key).pageIndex + 1}'
+                      : '',
+                    style: const TextStyle(color: AppColors.sub, fontSize: 11)),
+                  trailing: isPlaying
+                    ? IconButton(
+                        icon: const Icon(Icons.stop, color: Colors.red),
+                        onPressed: () {
+                          setState(() => _activePlayers.remove(e.key));
+                          Navigator.pop(context);
+                        })
+                    : IconButton(
+                        icon: const Icon(Icons.play_circle_fill, color: AppColors.cyan),
+                        onPressed: () {
+                          setState(() => _activePlayers[e.key] = true);
+                          Navigator.pop(context);
+                          _showVideoPlayer(e.key, e.value);
+                        }),
+                );
+              }).toList(),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+
+  void _showVideoPlayer(String name, String path) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: 280,
+          child: InlineVideoPlayer(
+            videoPath: path,
+            onClose: () {
+              setState(() => _activePlayers.remove(name));
+              Navigator.pop(context);
+            },
+          ),
+        ),
+      ),
+    );
   }
 
   void _showBookmarksSheet() {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.card,
-      // useSafeArea ensures bottom sheet respects home indicator
       useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -510,7 +478,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               margin: const EdgeInsets.only(top: 10, bottom: 4),
               width: 40, height: 4,
@@ -523,7 +490,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
               child: Text('Bookmarks (${_bookmarks.length})',
                 style: const TextStyle(color: AppColors.text,
                   fontWeight: FontWeight.bold, fontSize: 16))),
-            // Scrollable list
             Flexible(
               child: ListView(
                 shrinkWrap: true,
@@ -532,11 +498,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   title: Text(bm.label,
                     style: const TextStyle(color: AppColors.text)),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                      color: AppColors.sub, size: 18),
+                    icon: const Icon(Icons.delete_outline, color: AppColors.sub, size: 18),
                     onPressed: () async {
-                      await PrefsService.removeBookmark(
-                          widget.pdfPath, bm.page);
+                      await PrefsService.removeBookmark(widget.pdfPath, bm.page);
                       if (mounted) Navigator.pop(context);
                       _loadBookmarks();
                     },
@@ -548,7 +512,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 )).toList(),
               ),
             ),
-            // Bottom safe area padding for home indicator
             SizedBox(height: MediaQuery.of(context).padding.bottom),
           ],
         );
@@ -608,8 +571,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel',
-                style: TextStyle(color: AppColors.sub))),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.sub))),
             TextButton(
               onPressed: () {
                 final pg = int.tryParse(ctrl.text);
@@ -618,8 +580,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 }
                 Navigator.pop(context);
               },
-              child: const Text('Go',
-                style: TextStyle(color: AppColors.accent))),
+              child: const Text('Go', style: TextStyle(color: AppColors.accent))),
           ],
         );
       },
@@ -659,7 +620,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       content: Text(msg),
       backgroundColor: AppColors.card,
       behavior: SnackBarBehavior.floating,
-      // margin keeps snackbar above bottom navigation bar
       margin: EdgeInsets.only(
         bottom: 80 + MediaQuery.of(context).padding.bottom,
         left: 16, right: 16,
