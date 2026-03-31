@@ -33,7 +33,7 @@ class PdfVideoService {
 
   static void _scanAnnotations(String content, List<VideoArea> areas) {
     final jsRe = RegExp(
-      r'exportDataObject\s*\(\s*\{[^}]*cName\s*:\s*["\u0027]([^"\']+)["\u0027]',
+      r"""exportDataObject\s*\(\s*\{[^}]*cName\s*:\s*["']([^"']+)["']""",
       caseSensitive: false,
     );
     final rectRe  = RegExp(r'/Rect\s*\[([0-9.\s\-]+)\]');

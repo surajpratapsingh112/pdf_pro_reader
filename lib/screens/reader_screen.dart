@@ -20,7 +20,7 @@ class ReaderScreen extends StatefulWidget {
 
 class _ReaderScreenState extends State<ReaderScreen> {
   // PDF
-  PdfControllerPinch? _pdfCtrl;
+  PdfController? _pdfCtrl;
   int    _curPage    = 1;
   int    _totalPages = 1;
   bool   _loading    = true;
@@ -72,7 +72,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     try {
       final doc        = await PdfDocument.openFile(widget.pdfPath);
       final savedPage  = await PrefsService.getSavedPage(widget.pdfPath);
-      _pdfCtrl = PdfControllerPinch(
+      _pdfCtrl = PdfController(
         document:    Future.value(doc),
         initialPage: savedPage ?? 1,
       );
@@ -241,16 +241,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
         padding: EdgeInsets.only(top: topSafe, bottom: bottomSafe),
         child: GestureDetector(
           onTap: () => setState(() => _showControls = !_showControls),
-          child: PdfViewPinch(
+          child: PdfView(
             controller:      _pdfCtrl!,
             scrollDirection: Axis.vertical,
             padding:         8,
             onPageChanged:   _onPageChanged,
-            builders: PdfViewPinchBuilders<DefaultBuilderOptions>(
+            builders: PdfViewBuilders<DefaultBuilderOptions>(
               options: const DefaultBuilderOptions(),
               documentLoaderBuilder: (_) => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent)),
-              pageLoaderBuilder: (_, __) => const Center(
+              pageLoaderBuilder: (_) => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent)),
               pageBuilder: _buildPageWithVideos,
             ),
@@ -274,7 +274,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     BuildContext context,
     AsyncSnapshot<PdfPageImage?> snapshot,
     int pageNumber,
-    PdfPage page,
+    PdfDocument doc,
   ) {
     final img = snapshot.data;
     if (img == null) {
@@ -285,8 +285,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _videoAreas.where((v) => v.pageIndex == pageNumber - 1).toList();
 
     return LayoutBuilder(builder: (ctx, constraints) {
-      final sx = constraints.maxWidth  / page.width;
-      final sy = constraints.maxHeight / page.height;
+      final sx = constraints.maxWidth  / img.width.toDouble();
+      final sy = constraints.maxHeight / img.height.toDouble();
 
       return Stack(children: [
         // PDF page image — full size
