@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java 17
@@ -27,35 +27,21 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version info
-        run: flutter --version
-
-      - name: Generate Android project structure
+      - name: Create local.properties
         run: |
-          cp android/app/src/main/AndroidManifest.xml /tmp/our_manifest.xml
-          flutter create --org com.pdfpro --project-name pdf_pro_reader --platforms android .
-          cp /tmp/our_manifest.xml android/app/src/main/AndroidManifest.xml
-          echo "Android structure generated"
-          ls -la android/app/
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          cat android/local.properties
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze code
-        run: flutter analyze --no-fatal-warnings || true
-
-      - name: Build APK release
+      - name: Build APK
         run: flutter build apk --release
-
-      - name: Rename APK
-        run: |
-          mkdir -p output
-          cp build/app/outputs/flutter-apk/app-release.apk output/PDFProReader_v1.0.apk
-          ls -lh output/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PDFProReader_APK
-          path: output/PDFProReader_v1.0.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
