@@ -35,49 +35,54 @@ jobs:
 
       - name: Generate fresh Android project (v2 embedding)
         run: |
-          # Delete existing android dir — removes all v1 embedding conflicts
           rm -rf android/
-
-          # Flutter generates a clean v2 Android project
           flutter create \
             --org com.pdfpro \
             --project-name pdf_pro_reader \
             --platforms android \
             .
 
-      - name: Set minSdkVersion to 21 (required by pdfx)
+      - name: Fix Android build versions
         run: |
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' \
-            android/app/build.gradle || \
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/' \
-            android/app/build.gradle
-          echo "=== build.gradle minSdk check ==="
-          grep -n "minSdk" android/app/build.gradle
+          # Pin Kotlin + AGP versions (avoids version conflicts)
+          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "2.1.0"/' android/settings.gradle
+          sed -i 's/id "com.android.application" version "[^"]*"/id "com.android.application" version "8.3.0"/' android/settings.gradle
+
+          # Hardcode SDK versions (pdfx requires minSdk 21)
+          sed -i 's/compileSdk flutter\.compileSdkVersion/compileSdk 35/' android/app/build.gradle
+          sed -i 's/minSdk flutter\.minSdkVersion/minSdk 21/' android/app/build.gradle
+          sed -i 's/targetSdk flutter\.targetSdkVersion/targetSdk 34/' android/app/build.gradle
+
+          # Also try alternate format
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/' android/app/build.gradle
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/' android/app/build.gradle
+
+          echo "=== build.gradle SDK check ==="
+          grep -n "minSdk\|compileSdk\|targetSdk" android/app/build.gradle
+
+          # Optimize gradle memory
+          cat > android/gradle.properties << 'EOF'
+          org.gradle.jvmargs=-Xmx4G
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
 
       - name: Write complete AndroidManifest.xml
         run: |
           cat > android/app/src/main/AndroidManifest.xml << 'MANIFEST_EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-              <!-- Storage permissions for opening PDF files -->
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-                  android:maxSdkVersion="32"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-                  android:maxSdkVersion="29"/>
-              <!-- Android 13+ granular permissions -->
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
               <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
               <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-
-              <!-- Internet for AdMob -->
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-
               <application
                   android:label="PDF Pro Reader"
                   android:name="${applicationName}"
                   android:icon="@mipmap/ic_launcher"
                   android:requestLegacyExternalStorage="true">
-
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
@@ -87,40 +92,25 @@ jobs:
                       android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
                       android:hardwareAccelerated="true"
                       android:windowSoftInputMode="adjustResize">
-
-                      <!-- Flutter launcher -->
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
-
-                      <!-- Open PDF files from file manager -->
                       <intent-filter>
                           <action android:name="android.intent.action.VIEW"/>
                           <category android:name="android.intent.category.DEFAULT"/>
                           <data android:mimeType="application/pdf"/>
                       </intent-filter>
-
                   </activity>
-
-                  <!-- AdMob Test App ID (replace with real ID before publishing) -->
-                  <meta-data
-                      android:name="com.google.android.gms.ads.APPLICATION_ID"
-                      android:value="ca-app-pub-3940256099942544~3347511713"/>
-
-                  <meta-data
-                      android:name="flutterEmbedding"
-                      android:value="2"/>
-
+                  <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>
+                  <meta-data android:name="flutterEmbedding" android:value="2"/>
               </application>
-
               <queries>
                   <intent>
                       <action android:name="android.intent.action.VIEW"/>
                       <data android:scheme="content"/>
                   </intent>
               </queries>
-
           </manifest>
           MANIFEST_EOF
 
@@ -129,6 +119,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Fix plugin build.gradle SDK references
+        run: |
+          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.compileSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.compileSdkVersion/35/g' 2>/dev/null || true
+          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.minSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.minSdkVersion/21/g' 2>/dev/null || true
+          find $HOME/.pub-cache -name "build.gradle" | xargs grep -l "flutter\.targetSdkVersion" 2>/dev/null | xargs sed -i 's/flutter\.targetSdkVersion/34/g' 2>/dev/null || true
 
       - name: Analyze code (warnings only)
         run: flutter analyze --no-fatal-warnings || true
@@ -139,8 +135,7 @@ jobs:
       - name: Rename and prepare APK
         run: |
           mkdir -p output
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             output/PDFProReader_v1.0.apk
+          cp build/app/outputs/flutter-apk/app-release.apk output/PDFProReader_v1.0.apk
           echo "APK size:"
           ls -lh output/
 
