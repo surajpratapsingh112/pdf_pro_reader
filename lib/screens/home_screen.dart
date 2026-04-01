@@ -555,75 +555,255 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ── Star feature banner (Video in PDF) ───────────────────────────────────
+  // ── Star feature — Video in PDF Hero Card ────────────────────────────────
 
   Widget _buildStarBanner() {
     return GestureDetector(
       onTap: () => _FeatureTile.showDetailDialog(context, _kFeatures.first),
       child: Container(
-        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end:   Alignment.bottomRight,
             colors: [
-              AppColors.cyan.withOpacity(.12),
-              AppColors.accent.withOpacity(.08),
+              Color(0xFF0D1B2A), // deep navy
+              Color(0xFF001F2D), // darker navy
+              Color(0xFF003344), // subtle cyan tint
             ],
+            stops: [0.0, 0.55, 1.0],
           ),
-          border: Border.all(color: AppColors.cyan.withOpacity(.6), width: 1.5),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          children: [
-            // Icon
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.cyan.withOpacity(.18),
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.cyan.withOpacity(.5)),
-              ),
-              child: const Icon(Icons.videocam,
-                color: AppColors.cyan, size: 28),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.cyan.withOpacity(.7), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color:       AppColors.cyan.withOpacity(.25),
+              blurRadius:  22,
+              spreadRadius: 1,
+              offset: const Offset(0, 4),
             ),
-            const SizedBox(width: 14),
-            // Text
-            Expanded(
+          ],
+        ),
+        child: Stack(
+          children: [
+            // ── background glow blob ───────────────────────────────────
+            Positioned(
+              right: -30, top: -30,
+              child: Container(
+                width: 160, height: 160,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [
+                    AppColors.cyan.withOpacity(.12),
+                    Colors.transparent,
+                  ]),
+                ),
+              ),
+            ),
+
+            // ── content ───────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+
+                  // Row 1 — badge
                   Row(children: [
-                    const Text('🎬 Video in PDF',
-                      style: TextStyle(color: AppColors.cyan, fontSize: 15,
-                        fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                        horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.cyan.withOpacity(.2),
-                        borderRadius: BorderRadius.circular(4),
+                        gradient: LinearGradient(colors: [
+                          AppColors.cyan.withOpacity(.35),
+                          AppColors.accent.withOpacity(.25),
+                        ]),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: AppColors.cyan.withOpacity(.6)),
                       ),
-                      child: const Text('★ WORLD FIRST',
-                        style: TextStyle(color: AppColors.cyan,
-                          fontSize: 8, fontWeight: FontWeight.bold)),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.star, color: AppColors.cyan, size: 11),
+                          SizedBox(width: 4),
+                          Text('WORLD\'S FIRST  ·  INDIA\'S ONLY',
+                            style: TextStyle(
+                              color: AppColors.cyan,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8)),
+                        ],
+                      ),
                     ),
                   ]),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'PDF के अंदर Video! Adobe भी नहीं कर सकता — '
-                    'सिर्फ हमारी App में। Tap करें, पूरी detail जानें।',
-                    style: TextStyle(color: AppColors.sub, fontSize: 11,
-                      height: 1.4),
+                  const SizedBox(height: 14),
+
+                  // Row 2 — big play icon + title
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // glowing play circle
+                      Container(
+                        width: 58, height: 58,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(colors: [
+                            AppColors.cyan.withOpacity(.5),
+                            AppColors.cyan.withOpacity(.15),
+                          ]),
+                          border: Border.all(
+                            color: AppColors.cyan, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color:      AppColors.cyan.withOpacity(.45),
+                              blurRadius: 16,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.play_circle_fill,
+                          color: AppColors.cyan, size: 34),
+                      ),
+                      const SizedBox(width: 14),
+                      // title + subtitle
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('VIDEO  IN  PDF',
+                              style: TextStyle(
+                                color: AppColors.cyan,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.5,
+                              )),
+                            const SizedBox(height: 3),
+                            Text('PDF के Page के अंदर Video play करें!',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              )),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Row 3 — competition comparison
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(.07)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('दूसरे apps क्या कर सकते हैं?',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(.5),
+                            fontSize: 10)),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _compBadge('Adobe',  false),
+                            _compBadge('Xodo',   false),
+                            _compBadge('Google', false),
+                            _compBadge('WPS',    false),
+                            _compBadge('हमारी', true),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Row 4 — CTA button
+                  SizedBox(
+                    width: double.infinity,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          AppColors.cyan.withOpacity(.25),
+                          AppColors.accent.withOpacity(.2),
+                        ]),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.cyan.withOpacity(.5)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.touch_app,
+                            color: AppColors.cyan, size: 16),
+                          SizedBox(width: 7),
+                          Text('Tap करें — देखें यह कैसे काम करता है',
+                            style: TextStyle(
+                              color: AppColors.cyan,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Row 5 — coming soon teaser
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.computer,
+                        color: Colors.white.withOpacity(.35), size: 12),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Video embed करने के लिए  '
+                        'PDF Pro Suite (Desktop)  —  Coming Soon',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(.38),
+                          fontSize: 10),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios,
-              color: AppColors.cyan, size: 14),
           ],
         ),
       ),
+    );
+  }
+
+  /// Comparison badge widget (used inside star banner).
+  Widget _compBadge(String label, bool isUs) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isUs
+            ? AppColors.cyan.withOpacity(.2)
+            : Colors.red.withOpacity(.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isUs
+              ? AppColors.cyan.withOpacity(.6)
+              : Colors.red.withOpacity(.3)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text(isUs ? '✅' : '❌',
+          style: const TextStyle(fontSize: 10)),
+        const SizedBox(width: 3),
+        Text(label,
+          style: TextStyle(
+            color: isUs ? AppColors.cyan : Colors.red.shade300,
+            fontSize: 10,
+            fontWeight: FontWeight.bold)),
+      ]),
     );
   }
 
@@ -889,6 +1069,74 @@ class _FeatureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ── Video tile gets a special deep-navy style to match hero card ─────
+    if (info.isStar) {
+      return Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showDetailDialog(context, info),
+          child: Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0D1B2A), Color(0xFF003344)],
+              ),
+              border: Border.all(
+                color: AppColors.cyan.withOpacity(.65), width: 1.5),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.cyan.withOpacity(.18),
+                  blurRadius: 10, spreadRadius: 1),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.videocam,
+                    color: AppColors.cyan, size: 20),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppColors.cyan.withOpacity(.2),
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: AppColors.cyan.withOpacity(.5))),
+                    child: const Text('★ #1',
+                      style: TextStyle(
+                        color: AppColors.cyan, fontSize: 8,
+                        fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.info_outline,
+                    color: AppColors.cyan.withOpacity(.5), size: 13),
+                ]),
+                const Spacer(),
+                const Text('🎬 Video in PDF',
+                  style: TextStyle(
+                    color: AppColors.cyan, fontSize: 12,
+                    fontWeight: FontWeight.bold),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text('World\'s First!',
+                  style: TextStyle(
+                    color: AppColors.cyan.withOpacity(.6), fontSize: 10),
+                  maxLines: 1),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── All other tiles — standard style ─────────────────────────────────
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(12),
@@ -905,44 +1153,26 @@ class _FeatureTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Icon row
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Icon(info.icon, color: info.color, size: 20),
                   const Spacer(),
-                  if (info.isStar)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: info.color.withOpacity(.18),
-                        borderRadius: BorderRadius.circular(3)),
-                      child: Text('★',
-                        style: TextStyle(
-                          color: info.color, fontSize: 9)),
-                    ),
-                  const SizedBox(width: 4),
                   Icon(Icons.info_outline,
                     color: info.color.withOpacity(.4), size: 13),
                 ],
               ),
               const Spacer(),
-              // Title
               Text(info.title,
                 style: TextStyle(
-                  color: info.color,
-                  fontSize: 12,
+                  color: info.color, fontSize: 12,
                   fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 2),
-              // Subtitle
               Text(info.subtitle,
                 style: const TextStyle(
                   color: AppColors.sub, fontSize: 10),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
