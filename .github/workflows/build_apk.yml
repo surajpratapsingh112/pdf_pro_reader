@@ -130,6 +130,7 @@ jobs:
 
       - name: Fix plugin build.gradle SDK references
         run: |
+          # Pass 1 — replace flutter.* variable refs
           find $HOME/.pub-cache -name "build.gradle" \
             | xargs grep -l "flutter\.compileSdkVersion\|flutter\.minSdkVersion\|flutter\.targetSdkVersion" 2>/dev/null \
             | xargs sed -i \
@@ -137,6 +138,31 @@ jobs:
                 -e 's/flutter\.minSdkVersion/21/g' \
                 -e 's/flutter\.targetSdkVersion/35/g' \
               2>/dev/null || true
+
+          # Pass 2 — force compileSdk 35 even if plugins hardcode a number
+          # (printing plugin uses lStar attr which requires API 31+)
+          find $HOME/.pub-cache -name "build.gradle" -exec sed -i \
+            -e 's/compileSdkVersion [0-9][0-9]*/compileSdkVersion 35/g' \
+            -e 's/compileSdk = [0-9][0-9]*/compileSdk = 35/g' \
+            -e 's/compileSdk [0-9][0-9]*/compileSdk 35/g' \
+            {} \; 2>/dev/null || true
+
+          # Pass 3 — safety net: add subprojects block to root build.gradle
+          # so any plugin that Gradle resolves at sync time also gets compileSdk 35
+          cat >> android/build.gradle << 'SUBPROJECTS_EOF'
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdk 35
+                      }
+                  }
+              }
+          }
+          SUBPROJECTS_EOF
+          echo "=== root build.gradle tail ==="
+          tail -15 android/build.gradle
 
       - name: Analyze code (warnings only)
         run: flutter analyze --no-fatal-warnings || true
