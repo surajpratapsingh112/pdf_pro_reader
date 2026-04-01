@@ -316,10 +316,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   Widget _buildVideoOverlay(VideoArea v, double sw, double sh) {
-    final path = _videoPaths[v.name];
+    final path      = _videoPaths[v.name];
+    final isPlaying = _activePlayers[v.name] == true;
 
-    // Scale from PDF points (v.pageWidth × v.pageHeight) to screen pixels
-    // (sw × sh). This is correct regardless of the rendered image resolution.
+    // Scale from PDF points → screen pixels using stored page dimensions
     final sx = sw / v.pageWidth;
     final sy = sh / v.pageHeight;
 
@@ -328,28 +328,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
       top:    v.y0 * sy,
       width:  (v.x1 - v.x0) * sx,
       height: (v.y1 - v.y0) * sy,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: path != null
-            ? () => _showVideoPlayer(v.name, path)
-            : null,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.cyan, width: 3),
-            color:  AppColors.cyan.withOpacity(.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Center(
-            child: path != null
-                ? const Icon(Icons.play_circle_fill,
-                    color: AppColors.cyan, size: 52)
-                : const SizedBox(
-                    width: 24, height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.cyan)),
-          ),
-        ),
-      ),
+      child: isPlaying && path != null
+          // ── VIDEO PLAYS INLINE — right inside the PDF box ──────────────
+          ? InlineVideoPlayer(
+              videoPath: path,
+              onClose:   () => setState(() => _activePlayers.remove(v.name)),
+            )
+          // ── PLAY BUTTON — shown before user taps ────────────────────────
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                if (path != null) {
+                  setState(() => _activePlayers[v.name] = true);
+                }
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.cyan, width: 3),
+                  color:  AppColors.cyan.withOpacity(.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Center(
+                  child: path != null
+                      ? const Icon(Icons.play_circle_fill,
+                          color: AppColors.cyan, size: 52)
+                      : const SizedBox(
+                          width: 24, height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.cyan)),
+                ),
+              ),
+            ),
     );
   }
 
@@ -517,9 +526,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     : IconButton(
                         icon: const Icon(Icons.play_circle_fill, color: AppColors.cyan),
                         onPressed: () {
+                          // Jump to the page that has this video, then play inline
+                          final area = _videoAreas
+                              .where((v) => v.name == e.key)
+                              .firstOrNull;
+                          if (area != null) {
+                            _pdfCtrl?.jumpToPage(area.pageIndex + 1);
+                          }
                           setState(() => _activePlayers[e.key] = true);
                           Navigator.pop(context);
-                          _showVideoPlayer(e.key, e.value);
                         }),
                 );
               }).toList(),
@@ -527,26 +542,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom),
         ],
-      ),
-    );
-  }
-
-  void _showVideoPlayer(String name, String path) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: const EdgeInsets.all(16),
-        child: SizedBox(
-          height: 280,
-          child: InlineVideoPlayer(
-            videoPath: path,
-            onClose: () {
-              setState(() => _activePlayers.remove(name));
-              Navigator.pop(context);
-            },
-          ),
-        ),
       ),
     );
   }
