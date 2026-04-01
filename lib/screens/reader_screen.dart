@@ -267,6 +267,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     PdfDocument doc,
   ) {
     final screenSize = MediaQuery.of(context).size;
+    // Collect videos for this page once (used inside FutureBuilder)
+    final pageVideos = _videoAreas
+        .where((v) => v.pageIndex == pageIndex)
+        .toList();
 
     return PhotoViewGalleryPageOptions.customChild(
       childSize: screenSize,
@@ -281,18 +285,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
             return const Center(
               child: CircularProgressIndicator(color: AppColors.accent));
           }
-          final pageW     = (img.width  ?? 595).toDouble();
-          final pageH     = (img.height ?? 842).toDouble();
-          final pageVideos = _videoAreas
-              .where((v) => v.pageIndex == pageIndex)
-              .toList();
 
           return LayoutBuilder(
             builder: (ctx2, constraints) {
               final sw = constraints.maxWidth;
               final sh = constraints.maxHeight;
-              final sx = sw / pageW;
-              final sy = sh / pageH;
               return Stack(
                 children: [
                   // PDF page image fills the entire space
@@ -304,9 +301,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       height: sh,
                     ),
                   ),
-                  // Video overlay buttons on top
+                  // Video overlay buttons — scaled using PDF page dimensions
+                  // (stored in VideoArea.pageWidth/pageHeight from MediaBox),
+                  // NOT from img.width/height which are rendered-image pixels.
                   for (final v in pageVideos)
-                    _buildVideoOverlay(v, sx, sy),
+                    _buildVideoOverlay(v, sw, sh),
                 ],
               );
             },
@@ -316,32 +315,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildVideoOverlay(VideoArea v, double sx, double sy) {
-    final path   = _videoPaths[v.name];
-    final left   = v.x0 * sx;
-    final top    = v.y0 * sy;
-    final width  = (v.x1 - v.x0) * sx;
-    final height = (v.y1 - v.y0) * sy;
+  Widget _buildVideoOverlay(VideoArea v, double sw, double sh) {
+    final path = _videoPaths[v.name];
+
+    // Scale from PDF points (v.pageWidth × v.pageHeight) to screen pixels
+    // (sw × sh). This is correct regardless of the rendered image resolution.
+    final sx = sw / v.pageWidth;
+    final sy = sh / v.pageHeight;
 
     return Positioned(
-      left:   left,
-      top:    top,
-      width:  width,
-      height: height,
+      left:   v.x0 * sx,
+      top:    v.y0 * sy,
+      width:  (v.x1 - v.x0) * sx,
+      height: (v.y1 - v.y0) * sy,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: path != null
             ? () => _showVideoPlayer(v.name, path)
             : null,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.cyan, width: 2.5),
-            color:  AppColors.cyan.withOpacity(.12),
-            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: AppColors.cyan, width: 3),
+            color:  AppColors.cyan.withOpacity(.15),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
             child: path != null
                 ? const Icon(Icons.play_circle_fill,
-                    color: AppColors.cyan, size: 48)
+                    color: AppColors.cyan, size: 52)
                 : const SizedBox(
                     width: 24, height: 24,
                     child: CircularProgressIndicator(
