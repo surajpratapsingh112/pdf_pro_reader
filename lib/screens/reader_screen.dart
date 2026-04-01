@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
@@ -10,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../theme.dart';
 import '../models/video_area.dart';
 import '../services/pdf_video_service.dart';
+import '../services/pdf_enhance_service.dart';
 import '../services/prefs_service.dart';
 import '../widgets/inline_video_player.dart';
 
@@ -39,6 +41,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   // Night mode
   bool _nightMode = false;
+
+  // Page Enhancement
+  // Key = 0-based pageIndex (matches pageBuilder); value = enhanced PNG bytes
+  final Map<int, Uint8List> _enhancedPages = {};
+  bool _enhancingPage = false;
 
   // UI controls visibility (tap to toggle)
   bool _showControls = true;
@@ -192,6 +199,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
             _menuItem('bookmarks', '🔖  Bookmarks', Icons.bookmarks),
             _menuItem('share',     '📤  Share Page', Icons.share),
             _menuItem('goto',      '📄  Go to Page', Icons.input),
+            _menuItem('enhance',
+              _enhancedPages.containsKey(_curPage - 1)
+                ? '✨  Enhanced ✓' : '✨  Enhance Page',
+              Icons.auto_fix_high),
+            if (_enhancedPages.containsKey(_curPage - 1))
+              _menuItem('reset_enhance', '↩  Reset Page', Icons.refresh),
             if (_videoPaths.isNotEmpty)
               _menuItem('videos', '🎬  Play Video', Icons.videocam),
           ],
@@ -290,22 +303,39 @@ class _ReaderScreenState extends State<ReaderScreen> {
             builder: (ctx2, constraints) {
               final sw = constraints.maxWidth;
               final sh = constraints.maxHeight;
+              // Use enhanced bytes if user applied enhancement to this page
+              final displayBytes = _enhancedPages[pageIndex] ?? img.bytes;
               return Stack(
                 children: [
-                  // PDF page image fills the entire space
+                  // PDF page image (original or enhanced)
                   Positioned.fill(
                     child: Image.memory(
-                      img.bytes,
-                      fit: BoxFit.fill,
+                      displayBytes,
+                      fit:    BoxFit.fill,
                       width:  sw,
                       height: sh,
                     ),
                   ),
-                  // Video overlay buttons — scaled using PDF page dimensions
-                  // (stored in VideoArea.pageWidth/pageHeight from MediaBox),
-                  // NOT from img.width/height which are rendered-image pixels.
+                  // Video overlay buttons
                   for (final v in pageVideos)
                     _buildVideoOverlay(v, sw, sh),
+                  // Loading overlay while enhancing this page
+                  if (_enhancingPage && pageIndex == _curPage - 1)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black54,
+                        child: const Center(child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(color: AppColors.accent),
+                            SizedBox(height: 12),
+                            Text('Enhancing page…',
+                              style: TextStyle(color: Colors.white,
+                                fontSize: 14, decoration: TextDecoration.none)),
+                          ],
+                        )),
+                      ),
+                    ),
                 ],
               );
             },
@@ -474,6 +504,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
       case 'goto':
         _goToPage();
         break;
+      case 'enhance':
+        _showEnhanceSheet();
+        break;
+      case 'reset_enhance':
+        setState(() => _enhancedPages.remove(_curPage - 1));
+        _showSnack('Page reset to original');
+        break;
       case 'videos':
         _showVideosSheet();
         break;
@@ -544,6 +581,299 @@ class _ReaderScreenState extends State<ReaderScreen> {
         ],
       ),
     );
+  }
+
+  // ── Page Enhancement ───────────────────────────────────────────────────────
+
+  void _showEnhanceSheet() {
+    // Local mutable state lives inside StatefulBuilder
+    String? cleanMode;
+    double  cleanStrength   = 1.0;
+    bool    darkenText      = false;
+    double  darkenStrength  = 1.8;
+    bool    removeMarks     = false;
+    String  markType        = 'blue_pen';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          Widget sectionTitle(IconData icon, String label) => Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Row(children: [
+              Icon(icon, color: AppColors.accent, size: 18),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(
+                color: AppColors.text, fontWeight: FontWeight.bold,
+                fontSize: 14)),
+            ]),
+          );
+
+          Widget strengthSlider(double val, double min, double max,
+              String label, void Function(double) onChanged) =>
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Text(label, style: const TextStyle(
+                  color: AppColors.sub, fontSize: 12)),
+                Expanded(
+                  child: Slider(
+                    value:        val,
+                    min:          min,
+                    max:          max,
+                    divisions:    10,
+                    activeColor:  AppColors.accent,
+                    inactiveColor: AppColors.accent2.withOpacity(.3),
+                    label:        val.toStringAsFixed(1),
+                    onChanged:    onChanged,
+                  ),
+                ),
+                Text(val.toStringAsFixed(1),
+                  style: const TextStyle(color: AppColors.sub, fontSize: 12)),
+              ]),
+            );
+
+          return DraggableScrollableSheet(
+            expand:          false,
+            initialChildSize: 0.72,
+            maxChildSize:    0.95,
+            builder: (_, scrollCtrl) => ListView(
+              controller: scrollCtrl,
+              children: [
+                // ── Drag handle ──
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.sub.withOpacity(.4),
+                      borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const Center(child: Text('✨  Enhance Page',
+                  style: TextStyle(color: AppColors.text,
+                    fontWeight: FontWeight.bold, fontSize: 16))),
+                const SizedBox(height: 4),
+
+                // ── SECTION 1: Page Cleaning ─────────────────────────────
+                const Divider(color: Colors.white12, height: 20),
+                sectionTitle(Icons.cleaning_services, 'Page Cleaning'),
+                const Padding(
+                  padding: EdgeInsets.only(left: 16, bottom: 6),
+                  child: Text(
+                    'Removes yellowing, stains, shadows from scanned pages',
+                    style: TextStyle(color: AppColors.sub, fontSize: 11)),
+                ),
+                // Mode radio buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Wrap(
+                    spacing: 6,
+                    children: [
+                      for (final entry in {
+                        null:     'Off',
+                        'bw':     'B&W Clean',
+                        'color':  'Color',
+                        'shadow': 'Shadow',
+                      }.entries)
+                        ChoiceChip(
+                          label: Text(entry.value,
+                            style: const TextStyle(fontSize: 12)),
+                          selected:        cleanMode == entry.key,
+                          selectedColor:   AppColors.accent,
+                          backgroundColor: AppColors.accent2.withOpacity(.2),
+                          labelStyle: TextStyle(
+                            color: cleanMode == entry.key
+                              ? Colors.white : AppColors.sub),
+                          onSelected: (_) =>
+                            setLocal(() => cleanMode = entry.key),
+                        ),
+                    ],
+                  ),
+                ),
+                if (cleanMode != null)
+                  strengthSlider(cleanStrength, 0.5, 1.5, 'Strength  ',
+                    (v) => setLocal(() => cleanStrength = v)),
+
+                // ── SECTION 2: Text Darkening ────────────────────────────
+                const Divider(color: Colors.white12, height: 20),
+                sectionTitle(Icons.text_fields, 'Brighten & Darken Text'),
+                const Padding(
+                  padding: EdgeInsets.only(left: 16, bottom: 4),
+                  child: Text(
+                    'Darken faded/light text without affecting background',
+                    style: TextStyle(color: AppColors.sub, fontSize: 11)),
+                ),
+                SwitchListTile(
+                  value:     darkenText,
+                  onChanged: (v) => setLocal(() => darkenText = v),
+                  title: const Text('Enable Text Darkening',
+                    style: TextStyle(color: AppColors.text, fontSize: 13)),
+                  activeColor: AppColors.accent,
+                  dense: true,
+                ),
+                if (darkenText)
+                  strengthSlider(darkenStrength, 1.0, 3.0, 'Strength  ',
+                    (v) => setLocal(() => darkenStrength = v)),
+
+                // ── SECTION 3: Mark Removal ──────────────────────────────
+                const Divider(color: Colors.white12, height: 20),
+                sectionTitle(Icons.edit_off, 'Remove Pen / Pencil Marks'),
+                SwitchListTile(
+                  value:     removeMarks,
+                  onChanged: (v) => setLocal(() => removeMarks = v),
+                  title: const Text('Enable Mark Removal',
+                    style: TextStyle(color: AppColors.text, fontSize: 13)),
+                  activeColor: AppColors.accent,
+                  dense: true,
+                ),
+                if (removeMarks) ...[
+                  // Mark type selector
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                    child: Wrap(
+                      spacing: 6, runSpacing: 4,
+                      children: kMarkTypes.entries.map((e) => ChoiceChip(
+                        label: Text(e.value,
+                          style: const TextStyle(fontSize: 11)),
+                        selected:        markType == e.key,
+                        selectedColor:   AppColors.accent,
+                        backgroundColor: AppColors.accent2.withOpacity(.2),
+                        labelStyle: TextStyle(
+                          color: markType == e.key
+                            ? Colors.white : AppColors.sub),
+                        onSelected: (_) =>
+                          setLocal(() => markType = e.key),
+                      )).toList(),
+                    ),
+                  ),
+                  // Legal disclaimer
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:  Colors.orange.withOpacity(.1),
+                      border: Border.all(color: Colors.orange.withOpacity(.4)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                          color: Colors.orange, size: 16),
+                        SizedBox(width: 6),
+                        Expanded(child: Text(
+                          'For personal documents only (notes, textbooks, '
+                          'drafts). Using on official / legal / government '
+                          'documents may constitute forgery under IPC 463.',
+                          style: TextStyle(
+                            color: Colors.orange, fontSize: 11))),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // ── Apply / Reset buttons ────────────────────────────────
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(children: [
+                    if (_enhancedPages.containsKey(_curPage - 1))
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() =>
+                              _enhancedPages.remove(_curPage - 1));
+                            Navigator.pop(ctx);
+                            _showSnack('Page reset to original');
+                          },
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Reset'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.sub,
+                            side: const BorderSide(color: AppColors.sub)),
+                        ),
+                      ),
+                    if (_enhancedPages.containsKey(_curPage - 1))
+                      const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          final config = EnhanceConfig(
+                            cleanMode:      cleanMode,
+                            cleanStrength:  cleanStrength,
+                            darkenText:     darkenText,
+                            darkenStrength: darkenStrength,
+                            removeMarks:    removeMarks,
+                            markType:       markType,
+                          );
+                          if (!config.hasAnyEffect) {
+                            _showSnack('Select at least one enhancement');
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          _applyEnhancement(config);
+                        },
+                        icon: const Icon(Icons.auto_fix_high, size: 16),
+                        label: const Text('Apply to This Page'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _applyEnhancement(EnhanceConfig config) async {
+    setState(() => _enhancingPage = true);
+    try {
+      // Render the current page at 2× resolution for quality enhancement
+      final docFuture = _pdfCtrl?.document;
+      if (docFuture == null) return;
+      final doc     = await docFuture;
+      final page    = await doc.getPage(_curPage);          // 1-based
+      final rendered = await page.render(
+        width:  page.width  * 2,
+        height: page.height * 2,
+        format: PdfPageImageFormat.png,
+      );
+      await page.close();
+      if (rendered == null) {
+        _showSnack('Could not render page for enhancement');
+        return;
+      }
+
+      // Run enhancement in background isolate
+      final enhanced = await PdfEnhanceService.enhance(rendered.bytes, config);
+
+      if (mounted) {
+        setState(() {
+          _enhancedPages[_curPage - 1] = enhanced; // store as 0-based index
+          _enhancingPage = false;
+        });
+        _showSnack('✨ Page enhanced!');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _enhancingPage = false);
+        _showSnack('Enhancement failed: $e');
+      }
+    }
   }
 
   void _showBookmarksSheet() {
