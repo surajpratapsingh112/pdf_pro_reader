@@ -8,7 +8,7 @@ import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:pdf/pdf.dart';
+import 'package:pdf/pdf.dart' as pdflib;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../theme.dart';
@@ -1222,7 +1222,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   Future<void> _applyEraserStrokes() async {
     final pageIndex = _curPage - 1;
-    final points = [
+    final points = <Map<String, double>>[
       ...(_eraserPoints[pageIndex] ?? []),
       ..._currentEraserStroke,
     ];
@@ -1422,8 +1422,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
         await pg.close();
       } else {
         final rendered = await pg.render(
-          width:  pageW.toInt(),
-          height: pageH.toInt(),
+          width:  pageW * 2,   // 2× for quality; render() expects double
+          height: pageH * 2,
           format: PdfPageImageFormat.png,
         );
         await pg.close();
@@ -1433,7 +1433,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final memImg = pw.MemoryImage(imgBytes);
       pdfDoc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat(pageW, pageH),
+          pageFormat: pdflib.PdfPageFormat(pageW, pageH),
           margin: pw.EdgeInsets.zero,
           build: (_) => pw.Image(memImg, fit: pw.BoxFit.fill),
         ),
