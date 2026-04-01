@@ -70,6 +70,46 @@ class PdfEnhanceService {
     });
   }
 
+  /// Paint white circles at each eraser stroke point.
+  /// [strokes] is a list of maps: {'nx': double, 'ny': double, 'nr': double}
+  ///   nx, ny = centre normalised 0–1;  nr = radius normalised to image width.
+  /// Runs in a background isolate.
+  static Future<Uint8List> applyEraser(
+      Uint8List pngBytes, List<Map<String, double>> strokes) {
+    return compute(_applyEraserIsolate, {
+      'bytes':   pngBytes,
+      'strokes': strokes,
+    });
+  }
+
+  static Uint8List _applyEraserIsolate(Map<String, dynamic> args) {
+    final bytes   = args['bytes']   as Uint8List;
+    final strokes = (args['strokes'] as List)
+        .map((e) => Map<String, double>.from(e as Map))
+        .toList();
+
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return bytes;
+    final W = image.width, H = image.height;
+
+    for (final s in strokes) {
+      final cx = ((s['nx'] ?? 0.0) * W).round();
+      final cy = ((s['ny'] ?? 0.0) * H).round();
+      final r  = ((s['nr'] ?? 0.0) * W).round().clamp(2, W ~/ 2);
+
+      for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy <= r * r) {
+            final px = (cx + dx).clamp(0, W - 1);
+            final py = (cy + dy).clamp(0, H - 1);
+            image.setPixelRgb(px, py, 255, 255, 255);
+          }
+        }
+      }
+    }
+    return img.encodePng(image);
+  }
+
   // ── Isolate entry ─────────────────────────────────────────────────────────
 
   static Uint8List _enhanceIsolate(Map<String, dynamic> args) {

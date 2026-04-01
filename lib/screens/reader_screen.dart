@@ -8,6 +8,9 @@ import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../theme.dart';
 import '../models/video_area.dart';
 import '../services/pdf_video_service.dart';
@@ -49,6 +52,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   // UI controls visibility (tap to toggle)
   bool _showControls = true;
+
+  // ── Eraser tool ──────────────────────────────────────────────────────────
+  bool   _eraserMode  = false;
+  double _eraserSize  = 20.0; // on-screen radius in logical pixels
+  /// pageIndex → list of committed stroke points (normalised 0-1)
+  final Map<int, List<Map<String, double>>> _eraserPoints = {};
+  List<Map<String, double>> _currentEraserStroke = [];
+  bool _applyingEraser = false;
+
+  // ── Unsaved changes ──────────────────────────────────────────────────────
+  bool _hasUnsavedChanges = false;
 
   @override
   void initState() {
@@ -185,6 +199,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
             padding: EdgeInsets.only(right: 8),
             child: Center(child: SizedBox(width: 14, height: 14,
               child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.cyan)))),
+        // ── Done button — visible when there are unsaved edits ────────────
+        if (_hasUnsavedChanges || _eraserPoints.isNotEmpty)
+          TextButton.icon(
+            onPressed: _showDoneActions,
+            icon: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+            label: const Text('Done',
+              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+          ),
         IconButton(
           icon: Icon(_isBookmarked ? Icons.bookmark : Icons.bookmark_border),
           color: _isBookmarked ? const Color(0xFFFF9800) : AppColors.sub,
@@ -205,6 +227,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
               Icons.auto_fix_high),
             if (_enhancedPages.containsKey(_curPage - 1))
               _menuItem('reset_enhance', '↩  Reset Page', Icons.refresh),
+            _menuItem('eraser',    '✏️  Eraser Tool',    Icons.edit_off),
+            _menuItem('share_pdf', '📤  Share Full PDF', Icons.ios_share),
+            _menuItem('print',     '🖨️  Print PDF',      Icons.print),
+            if (_hasUnsavedChanges)
+              _menuItem('save_pdf', '💾  Save Changes',  Icons.save),
             if (_videoPaths.isNotEmpty)
               _menuItem('videos', '🎬  Play Video', Icons.videocam),
           ],
@@ -305,6 +332,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
               final sh = constraints.maxHeight;
               // Use enhanced bytes if user applied enhancement to this page
               final displayBytes = _enhancedPages[pageIndex] ?? img.bytes;
+              // Collect unapplied eraser points for this page
+              final pageEraserPts = <Map<String, double>>[
+                ...(_eraserPoints[pageIndex] ?? []),
+                if (pageIndex == _curPage - 1) ..._currentEraserStroke,
+              ];
               return Stack(
                 children: [
                   // PDF page image (original or enhanced)
@@ -319,6 +351,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   // Video overlay buttons
                   for (final v in pageVideos)
                     _buildVideoOverlay(v, sw, sh),
+                  // ── Eraser drawing overlay ────────────────────────────────
+                  if (pageEraserPts.isNotEmpty ||
+                      (_eraserMode && pageIndex == _curPage - 1))
+                    Positioned.fill(
+                      child: _eraserMode && pageIndex == _curPage - 1
+                          ? GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (d) =>
+                                  _onEraserPanStart(d, sw, sh, pageIndex),
+                              onPanUpdate: (d) =>
+                                  _onEraserPanUpdate(d, sw, sh, pageIndex),
+                              onPanEnd: (_) => _onEraserPanEnd(pageIndex),
+                              child: CustomPaint(
+                                painter: _EraserPainter(points: pageEraserPts),
+                              ),
+                            )
+                          : CustomPaint(
+                              painter: _EraserPainter(points: pageEraserPts),
+                            ),
+                    ),
                   // Loading overlay while enhancing this page
                   if (_enhancingPage && pageIndex == _curPage - 1)
                     Positioned.fill(
@@ -395,6 +447,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   // ── Navigation bar ─────────────────────────────────────────────────────────
 
   Widget _buildNavBar(double bottomPad) {
+    if (_eraserMode) return _buildEraserBar(bottomPad);
     final pct = _totalPages > 0 ? _curPage / _totalPages : 0.0;
     return SafeArea(
       top: false,
@@ -510,6 +563,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
       case 'reset_enhance':
         setState(() => _enhancedPages.remove(_curPage - 1));
         _showSnack('Page reset to original');
+        break;
+      case 'eraser':
+        _showEraserWarning();
+        break;
+      case 'save_pdf':
+        _showSaveDialog();
+        break;
+      case 'print':
+        _printPdf();
+        break;
+      case 'share_pdf':
+        _shareFullPdf();
         break;
       case 'videos':
         _showVideosSheet();
@@ -865,8 +930,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         setState(() {
           _enhancedPages[_curPage - 1] = enhanced; // store as 0-based index
           _enhancingPage = false;
+          _hasUnsavedChanges = true;
         });
-        _showSnack('✨ Page enhanced!');
+        _showSnack('✨ Page enhanced!  Tap Done to save.');
       }
     } catch (e) {
       if (mounted) {
@@ -1010,6 +1076,411 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ERASER TOOL
+  // ════════════════════════════════════════════════════════════════════════════
+
+  void _showEraserWarning() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+          SizedBox(width: 8),
+          Text('Eraser Tool',
+            style: TextStyle(color: AppColors.text, fontSize: 15)),
+        ]),
+        content: const Text(
+          'The eraser permanently removes visible content from the page '
+          'image.\n\n'
+          '⚠️  For personal use only (notes, study material, drafts). '
+          'Erasing official, legal, or government documents may constitute '
+          'forgery under IPC Section 463.\n\n'
+          'Continue?',
+          style: TextStyle(color: AppColors.sub, fontSize: 12)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+              style: TextStyle(color: AppColors.sub))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => _eraserMode = true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('I Understand',
+              style: TextStyle(color: Colors.white))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEraserBar(double bottomPad) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF7B0000).withOpacity(0.97),
+          border: Border(
+              top: BorderSide(color: Colors.red.withOpacity(.4))),
+        ),
+        padding: EdgeInsets.only(
+          left: 12, right: 12, top: 6,
+          bottom: bottomPad > 0 ? 4 : 8,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // Size control row
+          Row(children: [
+            const Icon(Icons.edit_off, color: Colors.white70, size: 16),
+            const SizedBox(width: 6),
+            const Text('Eraser  Size:',
+              style: TextStyle(color: Colors.white70, fontSize: 12)),
+            Expanded(
+              child: Slider(
+                value:     _eraserSize,
+                min:       8,
+                max:       60,
+                divisions: 13,
+                activeColor:   Colors.red.shade300,
+                inactiveColor: Colors.white24,
+                label: '${_eraserSize.round()}px',
+                onChanged: (v) => setState(() => _eraserSize = v),
+              ),
+            ),
+            Text('${_eraserSize.round()}',
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ]),
+          // Action buttons row
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  _eraserPoints.remove(_curPage - 1);
+                  _currentEraserStroke = [];
+                  _eraserMode = false;
+                }),
+                icon: const Icon(Icons.close, size: 15),
+                label: const Text('Cancel'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white30)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _applyingEraser ? null : _applyEraserStrokes,
+                icon: _applyingEraser
+                    ? const SizedBox(width: 14, height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check, size: 15),
+                label: Text(_applyingEraser ? 'Applying…' : 'Apply Eraser'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white),
+              ),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  void _onEraserPanStart(
+      DragStartDetails d, double sw, double sh, int pageIndex) {
+    final pt = {
+      'nx': (d.localPosition.dx / sw).clamp(0.0, 1.0),
+      'ny': (d.localPosition.dy / sh).clamp(0.0, 1.0),
+      'nr': _eraserSize / sw,
+    };
+    setState(() => _currentEraserStroke = [pt]);
+  }
+
+  void _onEraserPanUpdate(
+      DragUpdateDetails d, double sw, double sh, int pageIndex) {
+    final pt = {
+      'nx': (d.localPosition.dx / sw).clamp(0.0, 1.0),
+      'ny': (d.localPosition.dy / sh).clamp(0.0, 1.0),
+      'nr': _eraserSize / sw,
+    };
+    setState(() =>
+        _currentEraserStroke = [..._currentEraserStroke, pt]);
+  }
+
+  void _onEraserPanEnd(int pageIndex) {
+    setState(() {
+      _eraserPoints[pageIndex] = [
+        ...(_eraserPoints[pageIndex] ?? []),
+        ..._currentEraserStroke,
+      ];
+      _currentEraserStroke = [];
+    });
+  }
+
+  Future<void> _applyEraserStrokes() async {
+    final pageIndex = _curPage - 1;
+    final points = [
+      ...(_eraserPoints[pageIndex] ?? []),
+      ..._currentEraserStroke,
+    ];
+    if (points.isEmpty) {
+      _showSnack('Draw something with the eraser first');
+      return;
+    }
+    setState(() => _applyingEraser = true);
+    try {
+      // Get current page bytes (enhanced or freshly rendered)
+      Uint8List baseBytes;
+      if (_enhancedPages.containsKey(pageIndex)) {
+        baseBytes = _enhancedPages[pageIndex]!;
+      } else {
+        final doc      = await _pdfCtrl!.document;
+        final page     = await doc.getPage(_curPage);
+        final rendered = await page.render(
+          width:  page.width  * 2,
+          height: page.height * 2,
+          format: PdfPageImageFormat.png,
+        );
+        await page.close();
+        if (rendered == null) {
+          _showSnack('Could not render page');
+          setState(() => _applyingEraser = false);
+          return;
+        }
+        baseBytes = rendered.bytes;
+      }
+
+      final result = await PdfEnhanceService.applyEraser(baseBytes, points);
+
+      if (mounted) {
+        setState(() {
+          _enhancedPages[pageIndex]  = result;
+          _eraserPoints.remove(pageIndex);
+          _currentEraserStroke       = [];
+          _eraserMode                = false;
+          _applyingEraser            = false;
+          _hasUnsavedChanges         = true;
+        });
+        _showSnack('✓ Eraser applied.  Tap Done to save.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _applyingEraser = false);
+        _showSnack('Eraser failed: $e');
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // DONE  ·  SAVE  ·  PRINT  ·  SHARE
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /// Called by the green "Done" button.
+  void _showDoneActions() {
+    if (_eraserPoints.isNotEmpty || _currentEraserStroke.isNotEmpty) {
+      // Unapplied strokes — ask user what to do first
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Text('Unapplied Eraser Strokes',
+            style: TextStyle(color: AppColors.text)),
+          content: const Text(
+            'You have eraser strokes that have not been applied yet. '
+            'Apply them before saving?',
+            style: TextStyle(color: AppColors.sub, fontSize: 13)),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showSaveDialog();
+              },
+              child: const Text('Skip & Save',
+                style: TextStyle(color: AppColors.sub))),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _applyEraserStrokes().then((_) {
+                  if (mounted) _showSaveDialog();
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent),
+              child: const Text('Apply & Save',
+                style: TextStyle(color: Colors.white))),
+          ],
+        ),
+      );
+    } else {
+      _showSaveDialog();
+    }
+  }
+
+  void _showSaveDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Save Changes',
+          style: TextStyle(color: AppColors.text)),
+        content: const Text(
+          'How would you like to save the modified PDF?',
+          style: TextStyle(color: AppColors.sub, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+              style: TextStyle(color: AppColors.sub))),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _saveToFile(overwriteOriginal: true);
+            },
+            child: const Text('Save to Original',
+              style: TextStyle(color: AppColors.accent))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _saveToFile(overwriteOriginal: false);
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent),
+            child: const Text('Save as New File',
+              style: TextStyle(color: Colors.white))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveToFile({required bool overwriteOriginal}) async {
+    // Show non-dismissible progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.card,
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppColors.accent),
+              SizedBox(height: 12),
+              Text('Building PDF…',
+                style: TextStyle(color: AppColors.text, fontSize: 14)),
+              SizedBox(height: 4),
+              Text('This may take a moment',
+                style: TextStyle(color: AppColors.sub, fontSize: 11)),
+            ],
+          ),
+        ),
+      ),
+    );
+    try {
+      final pdfBytes = await _buildModifiedPdf();
+
+      final String savePath;
+      if (overwriteOriginal) {
+        savePath = widget.pdfPath;
+      } else {
+        final origName = p.basenameWithoutExtension(widget.pdfPath);
+        final docsDir  = await getApplicationDocumentsDirectory();
+        savePath = p.join(docsDir.path, '${origName}_enhanced.pdf');
+      }
+
+      await File(savePath).writeAsBytes(pdfBytes);
+
+      if (mounted) {
+        Navigator.pop(context); // close progress
+        setState(() => _hasUnsavedChanges = false);
+        _showSnack('✅ Saved: ${p.basename(savePath)}');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showSnack('Save failed: $e');
+      }
+    }
+  }
+
+  /// Render every page (using enhanced bytes where available) and build a PDF.
+  Future<Uint8List> _buildModifiedPdf() async {
+    final pdfDoc  = pw.Document();
+    final pdfxDoc = await _pdfCtrl!.document;
+
+    for (int i = 0; i < _totalPages; i++) {
+      final pg    = await pdfxDoc.getPage(i + 1);
+      final pageW = pg.width;
+      final pageH = pg.height;
+
+      Uint8List imgBytes;
+      if (_enhancedPages.containsKey(i)) {
+        imgBytes = _enhancedPages[i]!;
+        await pg.close();
+      } else {
+        final rendered = await pg.render(
+          width:  pageW.toInt(),
+          height: pageH.toInt(),
+          format: PdfPageImageFormat.png,
+        );
+        await pg.close();
+        imgBytes = rendered!.bytes;
+      }
+
+      final memImg = pw.MemoryImage(imgBytes);
+      pdfDoc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat(pageW, pageH),
+          margin: pw.EdgeInsets.zero,
+          build: (_) => pw.Image(memImg, fit: pw.BoxFit.fill),
+        ),
+      );
+    }
+    return pdfDoc.save();
+  }
+
+  Future<void> _printPdf() async {
+    try {
+      _showSnack('Preparing PDF for print…');
+      final pdfBytes = await _buildModifiedPdf();
+      await Printing.layoutPdf(
+        onLayout: (_) async => pdfBytes,
+        name: p.basename(widget.pdfPath),
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Print failed: $e');
+    }
+  }
+
+  Future<void> _shareFullPdf() async {
+    try {
+      if (!_hasUnsavedChanges && _enhancedPages.isEmpty) {
+        // No modifications — share the original file directly
+        await Share.shareXFiles(
+          [XFile(widget.pdfPath)],
+          text: 'Shared from PDF Pro Reader',
+        );
+        return;
+      }
+      _showSnack('Building PDF for sharing…');
+      final pdfBytes = await _buildModifiedPdf();
+      final tmp = File(p.join(
+        (await getTemporaryDirectory()).path,
+        p.basename(widget.pdfPath),
+      ));
+      await tmp.writeAsBytes(pdfBytes);
+      await Share.shareXFiles(
+        [XFile(tmp.path)],
+        text: 'Shared from PDF Pro Reader',
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Share failed: $e');
+    }
+  }
+
   Widget _buildError() {
     return SafeArea(
       child: Center(child: Padding(
@@ -1050,4 +1521,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
       duration: const Duration(seconds: 3),
     ));
   }
+}
+
+// ── Eraser Painter ────────────────────────────────────────────────────────────
+// Draws white filled circles at each eraser point (normalised coords 0–1).
+
+class _EraserPainter extends CustomPainter {
+  final List<Map<String, double>> points;
+  const _EraserPainter({required this.points});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fill = Paint()
+      ..color = Colors.white.withOpacity(0.93)
+      ..style = PaintingStyle.fill;
+    final border = Paint()
+      ..color = Colors.red.withOpacity(0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    for (final pt in points) {
+      final cx = (pt['nx'] ?? 0.0) * size.width;
+      final cy = (pt['ny'] ?? 0.0) * size.height;
+      final r  = (pt['nr'] ?? 0.0) * size.width;
+      canvas.drawCircle(Offset(cx, cy), r, fill);
+      canvas.drawCircle(Offset(cx, cy), r, border);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_EraserPainter old) => old.points != points;
 }
