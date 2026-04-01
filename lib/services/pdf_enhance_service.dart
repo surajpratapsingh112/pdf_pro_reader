@@ -189,9 +189,10 @@ class PdfEnhanceService {
         double g = ((p.g - minL) / range * 255).clamp(0.0, 255.0);
         double b = ((p.b - minL) / range * 255).clamp(0.0, 255.0);
         // Gamma < 1 brightens background toward white
-        r = (math.pow(r / 255, gamma) * 255).clamp(0.0, 255.0);
-        g = (math.pow(g / 255, gamma) * 255).clamp(0.0, 255.0);
-        b = (math.pow(b / 255, gamma) * 255).clamp(0.0, 255.0);
+        // math.pow returns num → cast to double explicitly
+        r = (math.pow(r / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
+        g = (math.pow(g / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
+        b = (math.pow(b / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
         result.setPixelRgb(x, y, r.round(), g.round(), b.round());
       }
     }
