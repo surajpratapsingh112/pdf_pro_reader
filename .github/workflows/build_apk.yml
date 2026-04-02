@@ -152,21 +152,26 @@ jobs:
       - name: Analyze code (warnings only)
         run: flutter analyze --no-fatal-warnings || true
 
-      - name: Build APK (release)
-        run: flutter build apk --release
+      - name: Build APK (release, split per ABI for smaller size)
+        run: flutter build apk --release --split-per-abi
 
-      - name: Rename and prepare APK
+      - name: Rename and prepare APKs
         run: |
           mkdir -p output
-          cp build/app/outputs/flutter-apk/app-release.apk output/PDFProReader_v1.0.apk
-          echo "APK size:"
+          # arm64-v8a  — modern phones (use this for local testing)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             output/PDFProReader_v1.1_arm64.apk
+          # armeabi-v7a — older 32-bit phones
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             output/PDFProReader_v1.1_arm32.apk
+          echo "APK sizes:"
           ls -lh output/
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: PDFProReader_APK
-          path: output/PDFProReader_v1.0.apk
+          name: PDFProReader_APKs
+          path: output/
           retention-days: 30
 
       - name: Done

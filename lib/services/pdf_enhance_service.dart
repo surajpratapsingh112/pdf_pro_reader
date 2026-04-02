@@ -4,8 +4,7 @@
 // never freezes.
 
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart'; // compute()
+import 'package:flutter/foundation.dart'; // compute() + Uint8List via services
 import 'package:image/image.dart' as img;
 
 // ── Configuration ────────────────────────────────────────────────────────────

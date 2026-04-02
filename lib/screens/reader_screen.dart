@@ -1,10 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
-import 'package:photo_view/photo_view.dart';
-import 'package:photo_view/photo_view_gallery.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -117,7 +114,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _scanningVideos = false;
         });
         if (result.videoPaths.isNotEmpty) {
-          _showSnack('${result.videoPaths.length} video(s) found — tap cyan box to play 🎬');
+          _showSnack('${result.videoPaths.length} video(s) found — tap the cyan box to play 🎬');
         }
       }
     } catch (_) {
@@ -381,7 +378,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           children: [
                             CircularProgressIndicator(color: AppColors.accent),
                             SizedBox(height: 12),
-                            Text('Enhancing page…',
+                            Text('Enhancing page, please wait…',
                               style: TextStyle(color: Colors.white,
                                 fontSize: 14, decoration: TextDecoration.none)),
                           ],
@@ -562,7 +559,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         break;
       case 'reset_enhance':
         setState(() => _enhancedPages.remove(_curPage - 1));
-        _showSnack('Page reset to original');
+        _showSnack('Page reset to original.');
         break;
       case 'eraser':
         _showEraserWarning();
@@ -731,7 +728,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 const Padding(
                   padding: EdgeInsets.only(left: 16, bottom: 6),
                   child: Text(
-                    'Removes yellowing, stains, shadows from scanned pages',
+                    'Remove yellowing, stains and shadows from scanned pages.',
                     style: TextStyle(color: AppColors.sub, fontSize: 11)),
                 ),
                 // Mode radio buttons
@@ -771,7 +768,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 const Padding(
                   padding: EdgeInsets.only(left: 16, bottom: 4),
                   child: Text(
-                    'Darken faded/light text without affecting background',
+                    'Darken faded or light text without altering the background.',
                     style: TextStyle(color: AppColors.sub, fontSize: 11)),
                 ),
                 SwitchListTile(
@@ -834,9 +831,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           color: Colors.orange, size: 16),
                         SizedBox(width: 6),
                         Expanded(child: Text(
-                          'For personal documents only (notes, textbooks, '
-                          'drafts). Using on official / legal / government '
-                          'documents may constitute forgery under IPC 463.',
+                          'For personal documents only — your own notes, '
+                          'textbooks and drafts. Using this on official, '
+                          'legal or government documents may constitute '
+                          'forgery as per the law of your country.',
                           style: TextStyle(
                             color: Colors.orange, fontSize: 11))),
                       ],
@@ -856,7 +854,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             setState(() =>
                               _enhancedPages.remove(_curPage - 1));
                             Navigator.pop(ctx);
-                            _showSnack('Page reset to original');
+                            _showSnack('Page reset to original.');
                           },
                           icon: const Icon(Icons.refresh, size: 16),
                           label: const Text('Reset'),
@@ -880,7 +878,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             markType:       markType,
                           );
                           if (!config.hasAnyEffect) {
-                            _showSnack('Select at least one enhancement');
+                            _showSnack('Please select at least one enhancement option.');
                             return;
                           }
                           Navigator.pop(ctx);
@@ -932,7 +930,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _enhancingPage = false;
           _hasUnsavedChanges = true;
         });
-        _showSnack('✨ Page enhanced!  Tap Done to save.');
+        _showSnack('✨ Page enhanced successfully! Tap Done to save.');
       }
     } catch (e) {
       if (mounted) {
@@ -1088,16 +1086,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
         title: const Row(children: [
           Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
           SizedBox(width: 8),
-          Text('Eraser Tool',
+          Text('Eraser Tool — Legal Warning',
             style: TextStyle(color: AppColors.text, fontSize: 15)),
         ]),
         content: const Text(
-          'The eraser permanently removes visible content from the page '
-          'image.\n\n'
-          '⚠️  For personal use only (notes, study material, drafts). '
-          'Erasing official, legal, or government documents may constitute '
-          'forgery under IPC Section 463.\n\n'
-          'Continue?',
+          'The Eraser Tool permanently removes visible content from the '
+          'page image. This action cannot be undone once saved.\n\n'
+          '⚠️  For personal use only — your own notes, study material, '
+          'and drafts. Erasing content from official, legal, or government '
+          'documents may constitute forgery as per the law of your country.\n\n'
+          'Do you wish to continue?',
           style: TextStyle(color: AppColors.sub, fontSize: 12)),
         actions: [
           TextButton(
@@ -1264,7 +1262,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _applyingEraser            = false;
           _hasUnsavedChanges         = true;
         });
-        _showSnack('✓ Eraser applied.  Tap Done to save.');
+        _showSnack('✓ Eraser applied successfully. Tap Done to save.');
       }
     } catch (e) {
       if (mounted) {
