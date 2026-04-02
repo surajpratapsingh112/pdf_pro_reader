@@ -549,7 +549,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _showBookmarksSheet();
         break;
       case 'share':
-        await _shareCurrentPage();
+        _showShareDialog();
         break;
       case 'goto':
         _goToPage();
@@ -571,7 +571,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _printPdf();
         break;
       case 'share_pdf':
-        _shareFullPdf();
+        _showShareDialog();
         break;
       case 'videos':
         _showVideosSheet();
@@ -655,6 +655,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     double  darkenStrength  = 1.8;
     bool    removeMarks     = false;
     String  markType        = 'blue_pen';
+    String  applyScope      = 'page'; // 'page' | 'document'
 
     showModalBottomSheet(
       context: context,
@@ -842,12 +843,116 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ],
 
+                // ── Apply scope selector ─────────────────────────────────
+                const Divider(color: Colors.white12, height: 20),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Apply To',
+                        style: TextStyle(
+                          color: AppColors.text,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13)),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setLocal(() => applyScope = 'page'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: applyScope == 'page'
+                                  ? AppColors.accent
+                                  : AppColors.accent2.withOpacity(.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: applyScope == 'page'
+                                    ? AppColors.accent
+                                    : AppColors.accent2.withOpacity(.3)),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.article,
+                                    color: applyScope == 'page'
+                                      ? Colors.white : AppColors.sub,
+                                    size: 20),
+                                  const SizedBox(height: 4),
+                                  Text('This Page',
+                                    style: TextStyle(
+                                      color: applyScope == 'page'
+                                        ? Colors.white : AppColors.sub,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold)),
+                                  Text('Page $_curPage only',
+                                    style: TextStyle(
+                                      color: applyScope == 'page'
+                                        ? Colors.white70 : AppColors.sub,
+                                      fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                              setLocal(() => applyScope = 'document'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: applyScope == 'document'
+                                  ? AppColors.accent
+                                  : AppColors.accent2.withOpacity(.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: applyScope == 'document'
+                                    ? AppColors.accent
+                                    : AppColors.accent2.withOpacity(.3)),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.auto_stories,
+                                    color: applyScope == 'document'
+                                      ? Colors.white : AppColors.sub,
+                                    size: 20),
+                                  const SizedBox(height: 4),
+                                  Text('Entire Document',
+                                    style: TextStyle(
+                                      color: applyScope == 'document'
+                                        ? Colors.white : AppColors.sub,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold)),
+                                  Text('All $_totalPages pages',
+                                    style: TextStyle(
+                                      color: applyScope == 'document'
+                                        ? Colors.white70 : AppColors.sub,
+                                      fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
+
                 // ── Apply / Reset buttons ────────────────────────────────
-                const SizedBox(height: 16),
+                const SizedBox(height: 4),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(children: [
-                    if (_enhancedPages.containsKey(_curPage - 1))
+                    if (_enhancedPages.containsKey(_curPage - 1) &&
+                        applyScope == 'page')
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
@@ -863,7 +968,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             side: const BorderSide(color: AppColors.sub)),
                         ),
                       ),
-                    if (_enhancedPages.containsKey(_curPage - 1))
+                    if (_enhancedPages.containsKey(_curPage - 1) &&
+                        applyScope == 'page')
                       const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
@@ -882,10 +988,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             return;
                           }
                           Navigator.pop(ctx);
-                          _applyEnhancement(config);
+                          if (applyScope == 'document') {
+                            _applyEnhancementToDocument(config);
+                          } else {
+                            _applyEnhancement(config);
+                          }
                         },
-                        icon: const Icon(Icons.auto_fix_high, size: 16),
-                        label: const Text('Apply to This Page'),
+                        icon: Icon(
+                          applyScope == 'document'
+                            ? Icons.auto_stories
+                            : Icons.auto_fix_high,
+                          size: 16),
+                        label: Text(applyScope == 'document'
+                          ? 'Enhance All $_totalPages Pages'
+                          : 'Apply to This Page'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.accent,
                           foregroundColor: Colors.white),
@@ -937,6 +1053,84 @@ class _ReaderScreenState extends State<ReaderScreen> {
         setState(() => _enhancingPage = false);
         _showSnack('Enhancement failed: $e');
       }
+    }
+  }
+
+  /// Enhances every page of the document with the given config.
+  /// Shows a live progress dialog — "Processing page X of Y…"
+  Future<void> _applyEnhancementToDocument(EnhanceConfig config) async {
+    final progressNotifier =
+        ValueNotifier<String>('Processing page 1 of $_totalPages…');
+
+    // Non-dismissible progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.card,
+          title: const Row(children: [
+            Icon(Icons.auto_stories, color: AppColors.accent, size: 18),
+            SizedBox(width: 8),
+            Text('Enhancing Document',
+              style: TextStyle(color: AppColors.text, fontSize: 14)),
+          ]),
+          content: ValueListenableBuilder<String>(
+            valueListenable: progressNotifier,
+            builder: (_, msg, __) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: AppColors.accent),
+                const SizedBox(height: 12),
+                Text(msg,
+                  style: const TextStyle(
+                    color: AppColors.text, fontSize: 13),
+                  textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                const Text('Please wait — do not close the app',
+                  style: TextStyle(color: AppColors.sub, fontSize: 11)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final doc = await _pdfCtrl!.document;
+      for (int i = 0; i < _totalPages; i++) {
+        if (!mounted) break;
+        progressNotifier.value =
+            'Processing page ${i + 1} of $_totalPages…';
+
+        final page     = await doc.getPage(i + 1);
+        final rendered = await page.render(
+          width:  page.width  * 2,
+          height: page.height * 2,
+          format: PdfPageImageFormat.png,
+        );
+        await page.close();
+        if (rendered == null) continue;
+
+        final enhanced =
+            await PdfEnhanceService.enhance(rendered.bytes, config);
+        if (mounted) setState(() => _enhancedPages[i] = enhanced);
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // close progress dialog
+        setState(() => _hasUnsavedChanges = true);
+        _showSnack(
+          '✨ All $_totalPages pages enhanced! Tap Done to save.');
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        _showSnack('Enhancement failed: $e');
+      }
+    } finally {
+      progressNotifier.dispose();
     }
   }
 
@@ -1004,33 +1198,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
       },
     );
-  }
-
-  Future<void> _shareCurrentPage() async {
-    try {
-      _showSnack('Preparing page for sharing...');
-      final docFuture = _pdfCtrl?.document;
-      if (docFuture == null) return;
-      final doc  = await docFuture;
-      final page = await doc.getPage(_curPage);
-      final img  = await page.render(
-        width:   page.width  * 2,
-        height:  page.height * 2,
-        format:  PdfPageImageFormat.jpeg,
-        quality: 90,
-      );
-      if (img == null) return;
-      final tmp = File(p.join(
-        (await getTemporaryDirectory()).path,
-        'pdf_page_$_curPage.jpg'));
-      await tmp.writeAsBytes(img.bytes);
-      await Share.shareXFiles(
-        [XFile(tmp.path)],
-        text: 'Shared from PDF Pro Reader — Page $_curPage',
-      );
-    } catch (e) {
-      _showSnack('Share failed: $e');
-    }
   }
 
   void _goToPage() {
@@ -1394,7 +1561,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (mounted) {
         Navigator.pop(context); // close progress
         setState(() => _hasUnsavedChanges = false);
-        _showSnack('✅ Saved: ${p.basename(savePath)}');
+        _showSavedDialog(savePath);
       }
     } catch (e) {
       if (mounted) {
@@ -1472,6 +1639,411 @@ class _ReaderScreenState extends State<ReaderScreen> {
       await tmp.writeAsBytes(pdfBytes);
       await Share.shareXFiles(
         [XFile(tmp.path)],
+        text: 'Shared from PDF Pro Reader',
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Share failed: $e');
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // POST-SAVE DIALOG
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /// Shown after a successful save: displays the file path and offers
+  /// Open File, Share, Print and Close actions.
+  void _showSavedDialog(String savePath) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Row(children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 22),
+          SizedBox(width: 8),
+          Text('Saved Successfully',
+            style: TextStyle(color: AppColors.text, fontSize: 15)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('File saved to:',
+              style: TextStyle(color: AppColors.sub, fontSize: 12)),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                savePath,
+                style: const TextStyle(
+                  color: AppColors.text, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close',
+              style: TextStyle(color: AppColors.sub))),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _printPdf();
+            },
+            icon: const Icon(Icons.print, size: 16,
+              color: AppColors.accent),
+            label: const Text('Print',
+              style: TextStyle(color: AppColors.accent))),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _showShareDialog();
+            },
+            icon: const Icon(Icons.share, size: 16,
+              color: AppColors.accent),
+            label: const Text('Share',
+              style: TextStyle(color: AppColors.accent))),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(
+                builder: (_) => ReaderScreen(pdfPath: savePath)));
+            },
+            icon: const Icon(Icons.open_in_new, size: 16),
+            label: const Text('Open File'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white)),
+        ],
+      ),
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // SHARE DIALOG  (4-way: current page as PDF/Image, full doc as PDF/Images)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  void _showShareDialog() {
+    final isLargeDoc = _totalPages > 20;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.sub.withOpacity(.4),
+              borderRadius: BorderRadius.circular(2)),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Text('Share Options',
+              style: TextStyle(color: AppColors.text,
+                fontWeight: FontWeight.bold, fontSize: 17))),
+
+          // ── Current Page ───────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+            child: Row(children: [
+              const Icon(Icons.article_outlined,
+                color: AppColors.sub, size: 14),
+              const SizedBox(width: 4),
+              Text('Current Page  (Page $_curPage)',
+                style: const TextStyle(
+                  color: AppColors.sub, fontSize: 12)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(children: [
+              Expanded(child: _shareOptionTile(
+                icon: Icons.picture_as_pdf,
+                color: const Color(0xFFE53935),
+                title: 'As PDF',
+                subtitle: 'Single-page\nPDF file',
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareCurrentPageAsPdf();
+                },
+              )),
+              Expanded(child: _shareOptionTile(
+                icon: Icons.image_outlined,
+                color: const Color(0xFF1E88E5),
+                title: 'As Image',
+                subtitle: 'JPEG\nimage file',
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareCurrentPageAsImage();
+                },
+              )),
+            ]),
+          ),
+
+          const SizedBox(height: 6),
+
+          // ── Entire Document ────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+            child: Row(children: [
+              const Icon(Icons.auto_stories,
+                color: AppColors.sub, size: 14),
+              const SizedBox(width: 4),
+              Text('Entire Document  ($_totalPages pages)',
+                style: const TextStyle(
+                  color: AppColors.sub, fontSize: 12)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(children: [
+              Expanded(child: _shareOptionTile(
+                icon: Icons.picture_as_pdf,
+                color: const Color(0xFFE53935),
+                title: 'As PDF',
+                subtitle: _hasUnsavedChanges
+                  ? 'Modified\nPDF file'
+                  : 'Original\nPDF file',
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareFullPdf();
+                },
+              )),
+              Expanded(child: _shareOptionTile(
+                icon: Icons.photo_library_outlined,
+                color: isLargeDoc
+                  ? const Color(0xFFFB8C00)
+                  : const Color(0xFF43A047),
+                title: 'As Images',
+                subtitle: isLargeDoc
+                  ? '⚠️ Large\n$_totalPages images'
+                  : '$_totalPages JPEG\nimages',
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isLargeDoc) {
+                    _confirmLargeImageShare();
+                  } else {
+                    _shareAllPagesAsImages();
+                  }
+                },
+              )),
+            ]),
+          ),
+
+          SizedBox(
+            height: MediaQuery.of(context).padding.bottom + 14),
+        ],
+      ),
+    );
+  }
+
+  /// A single tile inside the share dialog.
+  Widget _shareOptionTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.all(5),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(.08),
+          border: Border.all(color: color.withOpacity(.3)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 6),
+            Text(title,
+              style: TextStyle(
+                color: AppColors.text,
+                fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 3),
+            Text(subtitle,
+              style: const TextStyle(
+                color: AppColors.sub, fontSize: 10),
+              textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Warning dialog before sharing a large document as images.
+  void _confirmLargeImageShare() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded,
+            color: Colors.orange, size: 20),
+          SizedBox(width: 8),
+          Text('Large Document',
+            style: TextStyle(color: AppColors.text, fontSize: 15)),
+        ]),
+        content: Text(
+          'This document has $_totalPages pages. Sharing as images will '
+          'create $_totalPages JPEG files, which may take a while to '
+          'prepare and could be a very large share. Continue?',
+          style: const TextStyle(
+            color: AppColors.sub, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel',
+              style: TextStyle(color: AppColors.sub))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _shareAllPagesAsImages();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accent),
+            child: const Text('Share Anyway',
+              style: TextStyle(color: Colors.white))),
+        ],
+      ),
+    );
+  }
+
+  /// Share the current page as a single-page PDF.
+  Future<void> _shareCurrentPageAsPdf() async {
+    try {
+      _showSnack('Preparing PDF for page $_curPage…');
+      final doc  = await _pdfCtrl!.document;
+      final page = await doc.getPage(_curPage);
+      final pageW = page.width;
+      final pageH = page.height;
+
+      Uint8List imgBytes;
+      if (_enhancedPages.containsKey(_curPage - 1)) {
+        imgBytes = _enhancedPages[_curPage - 1]!;
+        await page.close();
+      } else {
+        final rendered = await page.render(
+          width:  pageW * 2,
+          height: pageH * 2,
+          format: PdfPageImageFormat.png,
+        );
+        await page.close();
+        if (rendered == null) { _showSnack('Could not render page'); return; }
+        imgBytes = rendered.bytes;
+      }
+
+      final pdfDoc = pw.Document();
+      pdfDoc.addPage(pw.Page(
+        pageFormat: pdflib.PdfPageFormat(pageW, pageH),
+        margin: pw.EdgeInsets.zero,
+        build: (_) =>
+          pw.Image(pw.MemoryImage(imgBytes), fit: pw.BoxFit.fill),
+      ));
+      final pdfBytes = await pdfDoc.save();
+
+      final tmp = File(p.join(
+        (await getTemporaryDirectory()).path,
+        'pdf_page_$_curPage.pdf'));
+      await tmp.writeAsBytes(pdfBytes);
+      await Share.shareXFiles(
+        [XFile(tmp.path)],
+        text: 'Page $_curPage from PDF Pro Reader',
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Share failed: $e');
+    }
+  }
+
+  /// Share the current page as a JPEG image (original implementation renamed).
+  Future<void> _shareCurrentPageAsImage() async {
+    try {
+      _showSnack('Preparing image for page $_curPage…');
+      final doc  = await _pdfCtrl!.document;
+      final page = await doc.getPage(_curPage);
+
+      Uint8List imgBytes;
+      if (_enhancedPages.containsKey(_curPage - 1)) {
+        imgBytes = _enhancedPages[_curPage - 1]!;
+        await page.close();
+      } else {
+        final rendered = await page.render(
+          width:   page.width  * 2,
+          height:  page.height * 2,
+          format:  PdfPageImageFormat.jpeg,
+          quality: 90,
+        );
+        await page.close();
+        if (rendered == null) { _showSnack('Could not render page'); return; }
+        imgBytes = rendered.bytes;
+      }
+
+      final tmp = File(p.join(
+        (await getTemporaryDirectory()).path,
+        'pdf_page_$_curPage.jpg'));
+      await tmp.writeAsBytes(imgBytes);
+      await Share.shareXFiles(
+        [XFile(tmp.path)],
+        text: 'Page $_curPage from PDF Pro Reader',
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Share failed: $e');
+    }
+  }
+
+  /// Share every page of the document as JPEG images.
+  Future<void> _shareAllPagesAsImages() async {
+    try {
+      _showSnack('Preparing $_totalPages images…');
+      final doc    = await _pdfCtrl!.document;
+      final tmpDir = await getTemporaryDirectory();
+      final files  = <XFile>[];
+
+      for (int i = 0; i < _totalPages; i++) {
+        final page = await doc.getPage(i + 1);
+
+        Uint8List imgBytes;
+        if (_enhancedPages.containsKey(i)) {
+          imgBytes = _enhancedPages[i]!;
+          await page.close();
+        } else {
+          final rendered = await page.render(
+            width:   page.width  * 2,
+            height:  page.height * 2,
+            format:  PdfPageImageFormat.jpeg,
+            quality: 85,
+          );
+          await page.close();
+          if (rendered == null) continue;
+          imgBytes = rendered.bytes;
+        }
+
+        final f = File(p.join(tmpDir.path, 'page_${i + 1}.jpg'));
+        await f.writeAsBytes(imgBytes);
+        files.add(XFile(f.path));
+      }
+
+      if (files.isEmpty) { _showSnack('No pages to share'); return; }
+      await Share.shareXFiles(
+        files,
         text: 'Shared from PDF Pro Reader',
       );
     } catch (e) {
