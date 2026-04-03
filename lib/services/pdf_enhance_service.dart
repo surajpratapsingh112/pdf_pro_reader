@@ -119,6 +119,14 @@ class PdfEnhanceService {
     img.Image? image = img.decodeImage(bytes);
     if (image == null) return bytes;
 
+    // ── Step 0: Composite on white background ──────────────────────────────
+    // PDF renderers sometimes produce transparent or semi-transparent pixels
+    // at page edges (anti-aliasing artefacts). Compositing on white first
+    // ensures every pixel is fully opaque and has a neutral background colour,
+    // which prevents the enhancement algorithms from misidentifying edge
+    // artefacts as "text" and creating false dark borders.
+    image = _compositeOnWhite(image);
+
     if (config.cleanMode != null) {
       image = _applyClean(image, config.cleanMode!, config.cleanStrength);
     }
@@ -130,6 +138,32 @@ class PdfEnhanceService {
     }
 
     return img.encodePng(image);
+  }
+
+  // ── Utility: composite image on opaque white canvas ───────────────────────
+  //
+  // Only meaningful when the source has an alpha channel (numChannels == 4).
+  // Transparent / semi-transparent pixels become their alpha-blended white
+  // equivalent, guaranteeing every output pixel is fully opaque white or
+  // whiter-than-original.
+
+  static img.Image _compositeOnWhite(img.Image src) {
+    if (src.numChannels < 4) return src; // no alpha — nothing to do
+    final W = src.width, H = src.height;
+    // Create a 3-channel (RGB, no alpha) image; default fill is black,
+    // so we explicitly write every pixel.
+    final out = img.Image(width: W, height: H, numChannels: 3);
+    for (int y = 0; y < H; y++) {
+      for (int x = 0; x < W; x++) {
+        final p = src.getPixel(x, y);
+        final a = (p.a / 255.0).clamp(0.0, 1.0);
+        final r = (p.r * a + 255 * (1 - a)).round().clamp(0, 255);
+        final g = (p.g * a + 255 * (1 - a)).round().clamp(0, 255);
+        final b = (p.b * a + 255 * (1 - a)).round().clamp(0, 255);
+        out.setPixelRgb(x, y, r, g, b);
+      }
+    }
+    return out;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -200,46 +234,59 @@ class PdfEnhanceService {
     return result;
   }
 
-  /// Color Clean: Histogram stretch + gamma correction.
-  /// Best for: documents with colored text / logos.
+  /// Color Clean: Selectively brightens near-white background pixels toward
+  /// pure white. Dark pixels (text, borders, stamps) and vibrant coloured
+  /// elements (logos, coloured headers) are left completely untouched, so the
+  /// original document colours are fully preserved.
+  ///
+  /// Best for: slightly yellowed or aged document scans with coloured content.
   static img.Image _cleanColor(img.Image src, double strength) {
     final W = src.width, H = src.height;
-    final gamma = (0.80 + (1.0 - strength) * 0.1).clamp(0.6, 1.0);
-
-    // Collect luminance for 2%–98% histogram stretch
-    final lums = List<double>.filled(W * H, 0);
-    int i = 0;
-    for (int y = 0; y < H; y++) {
-      for (int x = 0; x < W; x++) {
-        final p = src.getPixel(x, y);
-        lums[i++] = p.r * 0.299 + p.g * 0.587 + p.b * 0.114;
-      }
-    }
-    lums.sort();
-    final minL  = lums[(lums.length * 0.02).round()].clamp(0.0, 255.0);
-    final maxL  = lums[(lums.length * 0.98).round()].clamp(0.0, 255.0);
-    final range = (maxL - minL).clamp(1.0, 255.0);
-
     final result = img.Image(width: W, height: H);
+
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
         final p = src.getPixel(x, y);
-        double r = ((p.r - minL) / range * 255).clamp(0.0, 255.0);
-        double g = ((p.g - minL) / range * 255).clamp(0.0, 255.0);
-        double b = ((p.b - minL) / range * 255).clamp(0.0, 255.0);
-        // Gamma < 1 brightens background toward white
-        // math.pow returns num → cast to double explicitly
-        r = (math.pow(r / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
-        g = (math.pow(g / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
-        b = (math.pow(b / 255, gamma) * 255).toDouble().clamp(0.0, 255.0);
+        double r = p.r.toDouble(),
+               g = p.g.toDouble(),
+               b = p.b.toDouble();
+
+        final lum = r * 0.299 + g * 0.587 + b * 0.114;
+
+        // ── Only process LIGHT, LOW-SATURATION pixels (background) ─────────
+        // Dark pixels (lum < 145): text, borders, logos → copy unchanged.
+        // Vibrant coloured pixels (saturation ≥ 0.28): logos, stamps, coloured
+        //   text → copy unchanged.
+        // Everything else: gently push toward pure white.
+        if (lum >= 145) {
+          final maxC = math.max(r, math.max(g, b));
+          final minC = math.min(r, math.min(g, b));
+          final sat  = maxC > 1 ? (maxC - minC) / maxC : 0.0;
+
+          if (sat < 0.28) {
+            // Near-neutral light pixel → blend toward white
+            // t=0 at lum=145, t=1 at lum=255; scale by strength and 0.65
+            // so maximum push is never 100% (avoids blowing-out content).
+            final t = ((lum - 145) / 110).clamp(0.0, 1.0)
+                     * strength * 0.65;
+            r = (r + (255 - r) * t).clamp(0.0, 255.0);
+            g = (g + (255 - g) * t).clamp(0.0, 255.0);
+            b = (b + (255 - b) * t).clamp(0.0, 255.0);
+          }
+          // High-saturation (coloured logos, stamps): fall through unchanged
+        }
+        // Dark pixels: fall through unchanged
+
         result.setPixelRgb(x, y, r.round(), g.round(), b.round());
       }
     }
     return result;
   }
 
-  /// Shadow Clean: Divide each channel by its blurred background.
-  /// Best for: camera-photographed docs with uneven lighting.
+  /// Shadow Clean: Divide each channel by its blurred background to correct
+  /// uneven lighting (e.g. camera-photographed docs). Very dark pixels
+  /// (solid black borders, text) are preserved exactly to prevent them from
+  /// being crushed darker or pushed toward white incorrectly.
   static img.Image _cleanShadow(img.Image src, double strength) {
     final W = src.width, H = src.height;
     final radius = (40 * strength).round().clamp(25, 80);
@@ -250,7 +297,8 @@ class PdfEnhanceService {
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
         final p = src.getPixel(x, y);
-        rArr[y*W+x] = p.r.toInt(); gArr[y*W+x] = p.g.toInt();
+        rArr[y*W+x] = p.r.toInt();
+        gArr[y*W+x] = p.g.toInt();
         bArr[y*W+x] = p.b.toInt();
       }
     }
@@ -264,15 +312,24 @@ class PdfEnhanceService {
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
         final idx = y * W + x;
-        final r   = bgR[idx] > 0 ? (rArr[idx]/bgR[idx]*215).clamp(0,255) : 255.0;
-        final g   = bgG[idx] > 0 ? (gArr[idx]/bgG[idx]*215).clamp(0,255) : 255.0;
-        final b   = bgB[idx] > 0 ? (bArr[idx]/bgB[idx]*215).clamp(0,255) : 255.0;
-        final lum = r * 0.299 + g * 0.587 + b * 0.114;
-        // Push very bright areas to pure white
-        if (lum > 195) {
-          result.setPixelRgb(x, y, 255, 255, 255);
+        final origR = rArr[idx], origG = gArr[idx], origB = bArr[idx];
+        final lum   = origR * 0.299 + origG * 0.587 + origB * 0.114;
+
+        if (lum < 28) {
+          // Very dark pixel (solid black text, borders) — preserve exactly.
+          // Shadow correction can make these inconsistently darker or lighter.
+          result.setPixelRgb(x, y, origR, origG, origB);
         } else {
-          result.setPixelRgb(x, y, r.round(), g.round(), b.round());
+          final r = bgR[idx] > 4 ? (origR/bgR[idx]*210).clamp(0,255) : origR.toDouble();
+          final g = bgG[idx] > 4 ? (origG/bgG[idx]*210).clamp(0,255) : origG.toDouble();
+          final b = bgB[idx] > 4 ? (origB/bgB[idx]*210).clamp(0,255) : origB.toDouble();
+          final corrLum = r * 0.299 + g * 0.587 + b * 0.114;
+
+          if (corrLum > 205) {
+            result.setPixelRgb(x, y, 255, 255, 255);
+          } else {
+            result.setPixelRgb(x, y, r.round(), g.round(), b.round());
+          }
         }
       }
     }
@@ -283,7 +340,16 @@ class PdfEnhanceService {
   // FEATURE 2 — TEXT DARKENING
   // ════════════════════════════════════════════════════════════════════════════
 
-  /// Darken only text pixels (darker than local mean) without touching background.
+  /// Darken only text pixels (those clearly darker than their local context).
+  ///
+  /// Key design decisions (to prevent border/line artefacts):
+  ///  • Background pixels are NEVER modified — no brightening, no whitening.
+  ///  • The local comparison window is wider (radius = 24) for a more reliable
+  ///    "text vs background" decision, especially near document frame borders.
+  ///  • An absolute luminance gate (gv < 185) prevents near-white edge pixels
+  ///    from being misclassified as text due to asymmetric edge windows.
+  ///  • The outermost 4 pixels on each side of the image are left untouched to
+  ///    guard against any rendering artefact pixels at the image boundary.
   static img.Image _applyTextDarkening(img.Image src, double strength) {
     final W = src.width, H = src.height;
 
@@ -297,7 +363,7 @@ class PdfEnhanceService {
       }
     }
 
-    // Integral image for local mean (radius=16 block)
+    // Integral image for local mean (wider radius = more stable context)
     final integral = Float64List((W + 1) * (H + 1));
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
@@ -308,12 +374,25 @@ class PdfEnhanceService {
       }
     }
 
-    const half   = 16;
+    const half   = 24;   // wider window: ±24 px radius
+    const margin = 4;    // leave outermost 4 px on each edge untouched
     final result = img.Image(width: W, height: H);
+
     for (int y = 0; y < H; y++) {
       for (int x = 0; x < W; x++) {
-        final x1   = (x-half).clamp(0,W-1), y1 = (y-half).clamp(0,H-1);
-        final x2   = (x+half).clamp(0,W-1), y2 = (y+half).clamp(0,H-1);
+        final p  = src.getPixel(x, y);
+        double r = p.r.toDouble(),
+               g = p.g.toDouble(),
+               b = p.b.toDouble();
+
+        // ── Edge margin: copy pixel exactly, no processing ─────────────────
+        if (x < margin || y < margin || x >= W - margin || y >= H - margin) {
+          result.setPixelRgb(x, y, r.round(), g.round(), b.round());
+          continue;
+        }
+
+        final x1 = (x-half).clamp(0,W-1), y1 = (y-half).clamp(0,H-1);
+        final x2 = (x+half).clamp(0,W-1), y2 = (y+half).clamp(0,H-1);
         final area = ((x2-x1+1)*(y2-y1+1)).toDouble();
         final sum  = integral[(y2+1)*(W+1)+(x2+1)]
                    - integral[y1*(W+1)+(x2+1)]
@@ -321,20 +400,19 @@ class PdfEnhanceService {
                    + integral[y1*(W+1)+x1];
         final localMean = sum / area;
         final gv  = gray[y*W+x].toDouble();
-        final p   = src.getPixel(x, y);
-        double r  = p.r.toDouble(), g = p.g.toDouble(), b = p.b.toDouble();
 
-        if (gv < localMean - 8) {
-          // Text pixel → darken
+        // ── Text pixel: clearly darker than local context AND not near-white ─
+        // Threshold -15 (was -8): more conservative, avoids frame-border halos.
+        // Gate gv < 185: pixels above this are background regardless of local
+        // mean (e.g. the page margin adjacent to the document's dark frame).
+        if (gv < localMean - 15 && gv < 185) {
           r = (r / strength).clamp(0, 255);
           g = (g / strength).clamp(0, 255);
           b = (b / strength).clamp(0, 255);
-        } else if (gv > localMean + 5) {
-          // Background pixel → slightly whiten
-          r = (r * 1.06).clamp(0, 255);
-          g = (g * 1.06).clamp(0, 255);
-          b = (b * 1.06).clamp(0, 255);
         }
+        // Background pixels → copy EXACTLY as-is.
+        // No brightening, no whitening — eliminates the dark-border artefact
+        // that was caused by the previous r*1.06 "whitening" at pixel edges.
         result.setPixelRgb(x, y, r.round(), g.round(), b.round());
       }
     }
