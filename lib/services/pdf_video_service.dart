@@ -34,17 +34,23 @@ class PdfVideoService {
   }
 
   static void _scanAnnotations(String content, List<VideoArea> areas) {
-    // FIX 1: In PDF string literals, parentheses are escaped as \( and \).
-    // The JS action `exportDataObject({cName: "..."...})` is stored in raw bytes
-    // as `exportDataObject\({cName: "..."\)` — so we must allow an optional
-    // backslash before `(` using \\? in the regex.
+    // PDF string literals escape parentheses as \( and \).
     final jsRe = RegExp(
       r"""exportDataObject\s*\\?\(\s*\{[^}]*cName\s*:\s*["']([^"']+)["']""",
       caseSensitive: false,
     );
 
-    final rectRe   = RegExp(r'/Rect\s*\[?\s*([0-9.\-\s]+?)\s*\]');
+    final rectRe     = RegExp(r'/Rect\s*\[?\s*([0-9.\-\s]+?)\s*\]');
     final mediaBoxes = _extractMediaBoxes(content);
+
+    // Build ordered list of page-object numbers so we can map
+    // the /P reference in each annotation → correct 0-based page index.
+    // This is far more reliable than counting /Type/Page occurrences by
+    // file position, because pikepdf writes annotation objects AFTER all
+    // page objects — making the position-based heuristic always return the
+    // last page index for every annotation.
+    final pageObjNums = _getPageObjectNumbers(content);
+    _log('Page object numbers (in order): $pageObjNums');
 
     for (final jsMatch in jsRe.allMatches(content)) {
       final vname = jsMatch.group(1)!;
@@ -54,13 +60,29 @@ class PdfVideoService {
         continue;
       }
 
-      final start  = (jsMatch.start - 4000).clamp(0, content.length);
-      final end    = (jsMatch.end   +  500).clamp(0, content.length);
-      final window = content.substring(start, end);
+      // Search a window around the JS match for /Rect and /P reference.
+      // /P comes after the JS in the annotation dict but may be within ~1 KB.
+      final winStart = (jsMatch.start - 4000).clamp(0, content.length);
+      final winEnd   = (jsMatch.end   + 1500).clamp(0, content.length);
+      final window   = content.substring(winStart, winEnd);
 
-      // FIX 2: _guessPageIndex now correctly ignores /Type/Pages
-      final pageIdx = _guessPageIndex(content, jsMatch.start);
-      _log('  -> pageIndex=$pageIdx');
+      // ── Determine page index via /P reference ─────────────────────────
+      // Each Link annotation written by pikepdf contains  /P N 0 R
+      // pointing to its parent page object.  Find N, then look it up in
+      // pageObjNums to get the 0-based page index.
+      int pageIdx = 0;
+      final pRefRe = RegExp(r'/P\s+(\d+)\s+\d+\s+R');
+      final pMatch = pRefRe.firstMatch(window);
+      if (pMatch != null) {
+        final pageObjNum = int.parse(pMatch.group(1)!);
+        final idx = pageObjNums.indexOf(pageObjNum);
+        pageIdx = idx >= 0 ? idx : 0;
+        _log('  -> pageIndex=$pageIdx (via /P $pageObjNum)');
+      } else {
+        // Fallback: position-based heuristic (works for single-video PDFs)
+        pageIdx = _guessPageIndex(content, jsMatch.start);
+        _log('  -> pageIndex=$pageIdx (heuristic fallback, no /P found)');
+      }
 
       final rectMatch = rectRe.firstMatch(window);
       if (rectMatch == null) {
@@ -78,7 +100,6 @@ class PdfVideoService {
         continue;
       }
 
-      // FIX 3: Use actual PDF page dimensions from MediaBox for correct scaling
       final box   = pageIdx < mediaBoxes.length ? mediaBoxes[pageIdx]
                                                  : (width: 595.0, height: 842.0);
       final pageW = box.width;
@@ -91,9 +112,9 @@ class PdfVideoService {
       final area = VideoArea(
         pageIndex:  pageIdx,
         x0:         pdfX0,
-        y0:         pageH - pdfY1,   // PDF top → screen top
+        y0:         pageH - pdfY1,
         x1:         pdfX1,
-        y1:         pageH - pdfY0,   // PDF bottom → screen bottom
+        y1:         pageH - pdfY0,
         name:       vname,
         pageWidth:  pageW,
         pageHeight: pageH,
@@ -101,6 +122,23 @@ class PdfVideoService {
       _log('  -> VideoArea: $area');
       areas.add(area);
     }
+  }
+
+  /// Returns the PDF object numbers of all /Type /Page objects,
+  /// sorted by their byte position in the file (= page order).
+  static List<int> _getPageObjectNumbers(String content) {
+    final result = <({int num, int pos})>[];
+    final objRe  = RegExp(r'(\d+)\s+0\s+obj', multiLine: true);
+    for (final m in objRe.allMatches(content)) {
+      // Look ahead up to 1500 chars for /Type /Page (excluding /Pages)
+      final ahead = content.substring(
+          m.start, (m.start + 1500).clamp(0, content.length));
+      if (RegExp(r'/Type\s*/Page(?!s)').hasMatch(ahead)) {
+        result.add((num: int.parse(m.group(1)!), pos: m.start));
+      }
+    }
+    result.sort((a, b) => a.pos.compareTo(b.pos));
+    return result.map((e) => e.num).toList();
   }
 
   /// Returns list of (width, height) pairs from all /MediaBox entries.
@@ -114,11 +152,8 @@ class PdfVideoService {
     )).toList();
   }
 
-  /// Count how many actual page objects (/Type /Page, NOT /Type /Pages)
-  /// appear before [pos] to determine 0-based page index.
+  /// Fallback: count /Type /Page occurrences before [pos].
   static int _guessPageIndex(String content, int pos) {
-    // FIX 2: Use (?!s) to correctly exclude /Type/Pages from the count.
-    // The old lookahead (?!\s*/Pages) had a bug: it would still match /Pages.
     final re = RegExp(r'/Type\s*/Page(?!s)');
     int count = 0;
     for (final m in re.allMatches(content)) {
