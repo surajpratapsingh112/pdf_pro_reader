@@ -397,8 +397,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Widget _buildVideoOverlay(VideoArea v, double sw, double sh) {
     final path      = _videoPaths[v.name];
     final isPlaying = _activePlayers[v.name] == true;
+    final isGif     = v.name.toLowerCase().endsWith('.gif');
 
-    // Scale from PDF points → screen pixels using stored page dimensions
     final sx = sw / v.pageWidth;
     final sy = sh / v.pageHeight;
 
@@ -408,12 +408,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
       width:  (v.x1 - v.x0) * sx,
       height: (v.y1 - v.y0) * sy,
       child: isPlaying && path != null
-          // ── VIDEO PLAYS INLINE — right inside the PDF box ──────────────
-          ? InlineVideoPlayer(
-              videoPath: path,
-              onClose:   () => setState(() => _activePlayers.remove(v.name)),
-            )
-          // ── PLAY BUTTON — shown before user taps ────────────────────────
+          ? isGif
+              // ── GIF: show animated inline using Flutter Image widget ────
+              ? _buildInlineGif(path, v.name)
+              // ── VIDEO: use chewie player ────────────────────────────────
+              : InlineVideoPlayer(
+                  videoPath: path,
+                  onClose:   () => setState(() => _activePlayers.remove(v.name)),
+                )
+          // ── TAP BUTTON shown before user taps ──────────────────────────
           : GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
@@ -423,14 +426,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
               },
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.cyan, width: 3),
-                  color:  AppColors.cyan.withOpacity(.15),
+                  border: Border.all(
+                    color: isGif ? Colors.green : AppColors.cyan, width: 3),
+                  color: (isGif ? Colors.green : AppColors.cyan).withOpacity(.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Center(
                   child: path != null
-                      ? const Icon(Icons.play_circle_fill,
-                          color: AppColors.cyan, size: 52)
+                      ? Icon(
+                          isGif ? Icons.gif : Icons.play_circle_fill,
+                          color: isGif ? Colors.green : AppColors.cyan,
+                          size: 52)
                       : const SizedBox(
                           width: 24, height: 24,
                           child: CircularProgressIndicator(
@@ -438,6 +444,44 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildInlineGif(String path, String name) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.green, width: 2),
+        borderRadius: BorderRadius.circular(6),
+        color: Colors.black,
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.file(
+                File(path),
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 4, right: 4,
+            child: GestureDetector(
+              onTap: () => setState(() => _activePlayers.remove(name)),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.all(2),
+                child: const Icon(Icons.close, color: Colors.white70, size: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

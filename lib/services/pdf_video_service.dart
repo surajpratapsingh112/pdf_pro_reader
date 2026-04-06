@@ -10,7 +10,7 @@ import 'package:path/path.dart' as p;
 import '../models/video_area.dart';
 
 class PdfVideoService {
-  static const _videoExtensions = {'.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm'};
+  static const _videoExtensions = {'.mp4', '.avi', '.mov', '.wmv', '.mkv', '.webm', '.gif'};
 
   /// Extract all embedded video areas and their bytes from a PDF file.
   static Future<({List<VideoArea> areas, Map<String, String> videoPaths})>
