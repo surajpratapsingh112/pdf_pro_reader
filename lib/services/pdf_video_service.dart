@@ -60,11 +60,23 @@ class PdfVideoService {
         continue;
       }
 
-      // Search a window around the JS match for /Rect and /P reference.
-      // /P comes after the JS in the annotation dict but may be within ~1 KB.
-      final winStart = (jsMatch.start - 4000).clamp(0, content.length);
-      final winEnd   = (jsMatch.end   + 1500).clamp(0, content.length);
-      final window   = content.substring(winStart, winEnd);
+      // Find the start of the annotation object that contains this jsMatch by
+      // searching backwards for the nearest "N 0 obj" marker.  This prevents
+      // rectRe.firstMatch from picking up a /Rect belonging to an EARLIER
+      // annotation object when the backward window is too wide.
+      final lookBack = content.substring(
+          (jsMatch.start - 2000).clamp(0, content.length), jsMatch.start);
+      final objMarkerRe = RegExp(r'\d+\s+0\s+obj');
+      int objRelPos = 0;
+      for (final m in objMarkerRe.allMatches(lookBack)) {
+        objRelPos = m.start; // keep updating → last match = nearest object start
+      }
+      final objAbsStart =
+          (jsMatch.start - 2000).clamp(0, content.length) + objRelPos;
+
+      // /P comes AFTER the JS in the annotation dict; extend window forward.
+      final winEnd = (jsMatch.end + 1500).clamp(0, content.length);
+      final window = content.substring(objAbsStart, winEnd);
 
       // ── Determine page index via /P reference ─────────────────────────
       // Each Link annotation written by pikepdf contains  /P N 0 R
@@ -204,12 +216,16 @@ class PdfVideoService {
     final nameRe = RegExp(
         r'\(' + escapedName + r'\)\s*(\d+)\s+(\d+)\s+R',
         caseSensitive: false);
-    final nameMatch = nameRe.firstMatch(content);
-
-    if (nameMatch == null) {
+    // Use LAST match, not first: each _do_embed_gif call leaves a stale Names
+    // array in the file (pikepdf saves without GC).  firstMatch finds the stale
+    // entry whose EF stream may be unusable.  The LAST occurrence is always the
+    // most-recently-written Names array → the valid embedded file object.
+    final nameMatches = nameRe.allMatches(content).toList();
+    if (nameMatches.isEmpty) {
       _log('nameRe not found for "$filename" — trying stream search');
       return _extractViaStreamSearch(content, rawBytes, filename);
     }
+    final nameMatch = nameMatches.last;
 
     final objNum = int.parse(nameMatch.group(1)!);
     final genNum = int.parse(nameMatch.group(2)!);
