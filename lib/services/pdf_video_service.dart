@@ -281,6 +281,7 @@ class PdfVideoService {
   static Uint8List? _extractViaStreamSearch(
       String content, Uint8List rawBytes, String filename) {
     final ext = p.extension(filename).toLowerCase();
+
     // MP4/MOV magic: 4-byte box size + 'ftyp' at offset 4
     if (ext == '.mp4' || ext == '.mov') {
       const ftyp = [0x66, 0x74, 0x79, 0x70]; // 'ftyp'
@@ -296,6 +297,22 @@ class PdfVideoService {
         }
       }
     }
+
+    // GIF magic: GIF87a = [47 49 46 38 37 61]  GIF89a = [47 49 46 38 39 61]
+    if (ext == '.gif') {
+      const gif8 = [0x47, 0x49, 0x46, 0x38]; // 'GIF8'
+      for (int i = 0; i < rawBytes.length - 6; i++) {
+        if (rawBytes[i]   == gif8[0] && rawBytes[i+1] == gif8[1] &&
+            rawBytes[i+2] == gif8[2] && rawBytes[i+3] == gif8[3]) {
+          final endIdx = content.indexOf('endstream', i);
+          if (endIdx != -1) {
+            _log('Found GIF via magic bytes at $i');
+            return rawBytes.sublist(i, endIdx);
+          }
+        }
+      }
+    }
+
     _log('Stream search failed for $filename');
     return null;
   }
