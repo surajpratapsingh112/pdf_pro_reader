@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfx/pdfx.dart';
@@ -30,8 +31,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String? _error;
 
   // Video
-  List<VideoArea>     _videoAreas = [];
-  Map<String, String> _videoPaths = {};
+  List<VideoArea>       _videoAreas  = [];
+  Map<String, String>   _videoPaths  = {};
+  Map<String, Uint8List> _gifBytes   = {}; // pre-loaded bytes for animated GIFs
   bool _scanningVideos = true;
   final Map<String, bool> _activePlayers = {};
 
@@ -107,14 +109,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _scanVideos() async {
     try {
       final result = await PdfVideoService.extractFromPdf(widget.pdfPath);
-      if (mounted) {
-        setState(() {
-          _videoAreas     = result.areas;
-          _videoPaths     = result.videoPaths;
-          _scanningVideos = false;
-        });
-        if (result.videoPaths.isNotEmpty) {
-          _showSnack('${result.videoPaths.length} video(s) found — tap the cyan box to play 🎬');
+      if (!mounted) return;
+      setState(() {
+        _videoAreas     = result.areas;
+        _videoPaths     = result.videoPaths;
+        _scanningVideos = false;
+      });
+      if (result.videoPaths.isNotEmpty) {
+        _showSnack('${result.videoPaths.length} media file(s) found');
+      }
+      // Pre-load GIF bytes into memory so Image.memory() can animate them
+      for (final area in result.areas) {
+        if (area.name.toLowerCase().endsWith('.gif')) {
+          final path = result.videoPaths[area.name];
+          if (path != null) {
+            try {
+              final bytes = await File(path).readAsBytes();
+              if (mounted) setState(() => _gifBytes[area.name] = bytes);
+            } catch (_) {}
+          }
         }
       }
     } catch (_) {
@@ -408,9 +421,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       width:  (v.x1 - v.x0) * sx,
       height: (v.y1 - v.y0) * sy,
       child: isGif
-          // ── GIF: autoplay as soon as path is available, no tap needed ──
-          ? path != null
-              ? _buildInlineGif(path, v.name)
+          // ── GIF: autoplay as soon as bytes are loaded, no tap needed ──
+          ? _gifBytes.containsKey(v.name)
+              ? _buildInlineGif(v.name)
               : const Center(child: SizedBox(
                   width: 20, height: 20,
                   child: CircularProgressIndicator(
@@ -448,14 +461,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  Widget _buildInlineGif(String path, String name) {
-    // GIF autoplays and loops continuously — no controls needed
+  Widget _buildInlineGif(String name) {
+    // Image.memory() is more reliable than Image.file() for animated GIFs.
+    // Bytes were pre-loaded asynchronously in _scanVideos.
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
-      child: Image.file(
-        File(path),
+      child: Image.memory(
+        _gifBytes[name]!,
         fit: BoxFit.fill,
-        gaplessPlayback: true,
       ),
     );
   }
