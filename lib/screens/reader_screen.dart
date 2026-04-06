@@ -407,80 +407,55 @@ class _ReaderScreenState extends State<ReaderScreen> {
       top:    v.y0 * sy,
       width:  (v.x1 - v.x0) * sx,
       height: (v.y1 - v.y0) * sy,
-      child: isPlaying && path != null
-          ? isGif
-              // ── GIF: show animated inline using Flutter Image widget ────
+      child: isGif
+          // ── GIF: autoplay as soon as path is available, no tap needed ──
+          ? path != null
               ? _buildInlineGif(path, v.name)
-              // ── VIDEO: use chewie player ────────────────────────────────
-              : InlineVideoPlayer(
+              : const Center(child: SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.green)))
+          // ── VIDEO: tap to play ──────────────────────────────────────────
+          : isPlaying && path != null
+              ? InlineVideoPlayer(
                   videoPath: path,
                   onClose:   () => setState(() => _activePlayers.remove(v.name)),
                 )
-          // ── TAP BUTTON shown before user taps ──────────────────────────
-          : GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (path != null) {
-                  setState(() => _activePlayers[v.name] = true);
-                }
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isGif ? Colors.green : AppColors.cyan, width: 3),
-                  color: (isGif ? Colors.green : AppColors.cyan).withOpacity(.15),
-                  borderRadius: BorderRadius.circular(6),
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    if (path != null) {
+                      setState(() => _activePlayers[v.name] = true);
+                    }
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.cyan, width: 3),
+                      color:  AppColors.cyan.withOpacity(.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Center(
+                      child: path != null
+                          ? const Icon(Icons.play_circle_fill,
+                              color: AppColors.cyan, size: 52)
+                          : const SizedBox(
+                              width: 24, height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2, color: AppColors.cyan)),
+                    ),
+                  ),
                 ),
-                child: Center(
-                  child: path != null
-                      ? Icon(
-                          isGif ? Icons.gif : Icons.play_circle_fill,
-                          color: isGif ? Colors.green : AppColors.cyan,
-                          size: 52)
-                      : const SizedBox(
-                          width: 24, height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.cyan)),
-                ),
-              ),
-            ),
     );
   }
 
   Widget _buildInlineGif(String path, String name) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.green, width: 2),
-        borderRadius: BorderRadius.circular(6),
-        color: Colors.black,
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.file(
-                File(path),
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 4, right: 4,
-            child: GestureDetector(
-              onTap: () => setState(() => _activePlayers.remove(name)),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.all(2),
-                child: const Icon(Icons.close, color: Colors.white70, size: 16),
-              ),
-            ),
-          ),
-        ],
+    // GIF autoplays and loops continuously — no controls needed
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.file(
+        File(path),
+        fit: BoxFit.fill,
+        gaplessPlayback: true,
       ),
     );
   }
